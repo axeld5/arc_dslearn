@@ -4,3 +4,4 @@ __pycache__/
 old_code/
 .env
 trainer_output/
+later_use/

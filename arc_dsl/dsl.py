@@ -1,4 +1,4 @@
-from arc_types import *
+from arc_dsl.arc_types import *
 
 
 def identity(
