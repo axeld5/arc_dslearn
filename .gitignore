@@ -1,0 +1,6 @@
+ARC-AGI/
+*.zip
+__pycache__/
+old_code/
+.env
+trainer_output/
