@@ -227,6 +227,21 @@ def variant_generators(name: str, anno: Any, func_name: str = "") -> list[Callab
 # ---------------------------------------------------------------------------
 # 2. build one prompt block
 # ---------------------------------------------------------------------------
+def dsl_functions_summary() -> str:
+    """Return a readable bullet‑list of DSL functions (name, signature, return,
+    first docstring line).  Runs **once** at import time."""
+    lines: list[str] = []
+    for name, func in inspect.getmembers(dsl, inspect.isfunction):
+        if name.startswith("_"):
+            continue  # skip private helpers
+        sig = inspect.signature(func)
+        ret = sig.return_annotation if sig.return_annotation is not inspect._empty else "Any"
+        doc = (func.__doc__ or "").strip().splitlines()[0]
+        lines.append(f"- {name}{sig} -> {ret}: {doc}")
+    return "\n".join(lines)
+
+DSL_FUNCTIONS_BLOCK = dsl_functions_summary()
+
 def make_block(func: Callable,
                min_shots: int = 2,
                max_shots: int = 5) -> dict:
@@ -263,31 +278,47 @@ def make_block(func: Callable,
         shots.append({"inputs": kwargs, "output": out})
 
     # -------------------- few-shot prompt text ------------------------------
-    demo_lines = []
+    system_prompt = (
+        "Given the functions of the DSL below, you must implement a new "
+        "function called `solve` that **only** composes these DSL primitives.\n"
+        "Constants, if any, must come from the DSL’s public constants list.\n\n"
+        "DSL reference:\n" + DSL_FUNCTIONS_BLOCK
+    )
+
+    # few‑shot part the model sees *before* the task
+    examples_txt: list[str] = []
     for k, s in enumerate(shots, 1):
-        demo_lines.append(f"# Example {k}")
+        examples_txt.append(f"# Example {k}")
         for arg_name, val in s["inputs"].items():
-            demo_lines.append(f"{arg_name.upper()} = {pformat(val)}")
-        demo_lines.append(f"# Desired → {pformat(s['output'])}")
-        demo_lines.append("")
+            examples_txt.append(f"{arg_name.upper()} = {pformat(val)}")
+        examples_txt.append(f"# Desired → {pformat(s['output'])}\n")
 
-    input_prompt = (
-        f"You are given {len(shots)} input/output examples of "
-        f"`{func.__name__}` in action.\n\n"
-        + "\n".join(demo_lines)
-        + "### Now implement solve(I):"
-    )
-
-    output_prompt = (
+    user_prompt = (
+        "\n".join(examples_txt) +
+        "### Task\n"
+        "Write python **code only** following *exactly* this template:```python\n"
         "def solve(I):\n"
-        f"    return {func.__name__}(I)"
+        "    # line_1\n"
+        "    x1 = dsl_function(... )\n"
+        "    # line_2\n"
+        "    x2 = dsl_function(... )\n"
+        "    # ...\n"
+        "    O  = xN\n"
+        "    return O\n```\n"
+        "Do not import anything.  Do not use non‑DSL names.  Return the final "
+        "value in *O*."
     )
+    
+    assistant_prompt = (
+        "```python\n"
+        f"def solve(I):\n    O = {func.__name__}(I)\n    return O\n```")
 
     return {
         "name": func.__name__,
+        "system_prompt": system_prompt,
+        "user_prompt": user_prompt,
+        "assistant_prompt": assistant_prompt,
         "shots": shots,
-        "input_prompt": input_prompt,
-        "output_prompt": output_prompt,
     }
 
 # ---------------------------------------------------------------------------
@@ -295,35 +326,36 @@ def make_block(func: Callable,
 # ---------------------------------------------------------------------------
 def main() -> Sequence[dict]:
     blocks = []
-    for name, func in inspect.getmembers(dsl, inspect.isfunction):
-        if name.startswith('_'):
-            continue
+    for _ in range(10):
+        for name, func in inspect.getmembers(dsl, inspect.isfunction):
+            if name.startswith('_'):
+                continue
 
-        sig = inspect.signature(func)
+            sig = inspect.signature(func)
 
-        # skip functions that *return* a Callable
-        ret_anno = sig.return_annotation
-        if ret_anno is not inspect._empty and (
-            ret_anno is Callable or get_origin(ret_anno) is Callable
-        ):
-            continue
+            # skip functions that *return* a Callable
+            ret_anno = sig.return_annotation
+            if ret_anno is not inspect._empty and (
+                ret_anno is Callable or get_origin(ret_anno) is Callable
+            ):
+                continue
 
-        # skip functions that *take* a Callable as parameter
-        has_callable_param = any(
-            param.annotation is Callable or get_origin(param.annotation) is Callable
-            for param in sig.parameters.values()
-            if param.annotation is not inspect._empty
-        )
-        if has_callable_param:
-            print(f"[info] skipped {name}: has callable parameter")
-            continue
+            # skip functions that *take* a Callable as parameter
+            has_callable_param = any(
+                param.annotation is Callable or get_origin(param.annotation) is Callable
+                for param in sig.parameters.values()
+                if param.annotation is not inspect._empty
+            )
+            if has_callable_param:
+                print(f"[info] skipped {name}: has callable parameter")
+                continue
 
-        try:
-            blocks.append(make_block(func))
-        except Exception as err:
-            # silenced: comment out the next line for verbose debugging
-            print(f"[warn] skipped {name}: {err}")
-            pass
+            try:
+                blocks.append(make_block(func))
+            except Exception as err:
+                # silenced: comment out the next line for verbose debugging
+                print(f"[warn] skipped {name}: {err}")
+                pass
     return blocks
 
 
