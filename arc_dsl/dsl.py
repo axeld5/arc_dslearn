@@ -552,7 +552,7 @@ def mpapply(
 
 
 def prapply(
-    function,
+    function: Callable,
     a: Container,
     b: Container
 ) -> FrozenSet:
