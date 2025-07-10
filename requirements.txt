@@ -4,3 +4,4 @@ transformers
 peft
 bitsandbytes
 accelerate
+trl
