@@ -87,12 +87,12 @@ def preprocess(example):
         add_generation_prompt=True  # ensures <|assistant|> is added
     )
     
-    # Tokenize full and prefix
+    # Tokenize full and prefix (no padding during preprocessing)
     full_tokens = tokenizer(
         full_text,
         truncation=True,
         max_length=MAX_LEN,
-        padding=True
+        padding=False  # Don't pad during preprocessing
     )
     prefix_tokens = tokenizer(
         prefix_text,
