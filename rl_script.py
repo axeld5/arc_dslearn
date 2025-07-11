@@ -172,7 +172,6 @@ grpo_cfg = GRPOConfig(
 # ---------------------------------------------------------------------
 trainer = GRPOTrainer(
     model=model,
-    tokenizer=tokenizer,
     args=grpo_cfg,
     train_dataset=ds,
     reward_funcs=reward_fn,           # <- the heart of the pipeline
