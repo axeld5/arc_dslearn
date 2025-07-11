@@ -84,7 +84,7 @@ models = {k: load_policy(k).eval() for k in ("base", "sft", "rl")}
 # ------------------------------------------------------------------ evaluation loop
 def accuracy(model) -> float:
     ok = 0
-    for sample in eval_data:
+    for i, sample in enumerate(eval_data):
         prompt = build_prompt(sample)
         input_ids = tokenizer(prompt, return_tensors="pt").to(model.device)
         with torch.inference_mode():
@@ -98,13 +98,22 @@ def accuracy(model) -> float:
 
         # functional check
         mod = safe_exec(gen_text)
+        solved = False
         if mod and callable(getattr(mod, "solve", None)):
             try:
                 with time_limit(2):
                     if all(mod.solve(s["inputs"]) == s["output"] for s in sample["shots"]):
                         ok += 1
+                        solved = True
             except Exception:
                 pass
+                
+        if i > 0 and i % 10 == 0:
+            print(f"\nSample {i}:")
+            print(f"User prompt: {sample['user_prompt'][:100]}...")
+            print(f"Generated solution: {gen_text[:100]}...")
+            print(f"Solved correctly: {solved}")
+            
     return ok / len(eval_data)
 
 start = time()
