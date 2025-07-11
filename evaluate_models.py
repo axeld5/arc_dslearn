@@ -13,7 +13,7 @@ from peft import PeftModel
 from trl import AutoModelForCausalLMWithValueHead
 
 # ------------------------------------------------------------------ paths
-BASE_MODEL   = "Qwen/Qwen2.5-Coder-1.5B"
+BASE_MODEL   = "Qwen/Qwen2.5-Coder-1.5B-Instruct"
 LORA_SFT_DIR = "qwen25_coder_lora/final"
 LORA_RL_DIR  = "qwen25_coder_grpo/final"   # contains value-head
 EVAL_FILE    = "eval_split.json"
@@ -62,19 +62,19 @@ def build_prompt(sample):
 def load_policy(name: str):
     if name == "base":
         return AutoModelForCausalLM.from_pretrained(
-            BASE_MODEL, device_map="auto", load_in_4bit=True,
+            BASE_MODEL, device_map="auto",
             torch_dtype=torch.bfloat16, trust_remote_code=True
         )
     if name == "sft":
         base = AutoModelForCausalLM.from_pretrained(
-            BASE_MODEL, device_map="auto", load_in_4bit=True,
+            BASE_MODEL, device_map="auto",
             torch_dtype=torch.bfloat16, trust_remote_code=True
         )
         return PeftModel.from_pretrained(base, LORA_SFT_DIR)
     if name == "rl":
         # value-head still works with .generate
         return AutoModelForCausalLMWithValueHead.from_pretrained(
-            LORA_RL_DIR, device_map="auto", load_in_4bit=True,
+            LORA_RL_DIR, device_map="auto",
             torch_dtype=torch.bfloat16, trust_remote_code=True
         )
     raise ValueError(name)
