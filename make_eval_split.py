@@ -1,7 +1,7 @@
 import json, random
 from pathlib import Path
 
-SRC_FILE   = Path("train_set/train_set.json")
+SRC_FILE   = Path("train_set.json")
 TRAIN_OUT  = Path("train_split.json")
 EVAL_OUT   = Path("eval_split.json")
 SPLIT_SEED = 42

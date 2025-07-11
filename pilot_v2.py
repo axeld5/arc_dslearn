@@ -242,6 +242,19 @@ def dsl_functions_summary() -> str:
 
 DSL_FUNCTIONS_BLOCK = dsl_functions_summary()
 
+def to_jsonable(x):
+    if isinstance(x, frozenset):
+        return {"__frozenset__": [to_jsonable(v) for v in sorted(x)]}
+    if isinstance(x, tuple):
+        return {"__tuple__": [to_jsonable(v) for v in x]}
+    if isinstance(x, set):
+        return {"__set__": [to_jsonable(v) for v in sorted(x)]}
+    if isinstance(x, dict):
+        return {k: to_jsonable(v) for k, v in x.items()}
+    if isinstance(x, (list, int, float, str, bool)) or x is None:
+        return x
+    return {"__str__": str(x)}    # last resort
+
 def make_block(func: Callable,
                min_shots: int = 2,
                max_shots: int = 5) -> dict:
@@ -275,7 +288,10 @@ def make_block(func: Callable,
             # retry with fresh random values
             kwargs = {n: random.choice(g)() for n, g in param_variants.items()}
             out = func(**kwargs)
-        shots.append({"inputs": kwargs, "output": out})
+        shots.append({
+            "inputs": to_jsonable(kwargs),
+            "output": to_jsonable(out),
+        })
 
     # -------------------- few-shot prompt text ------------------------------
     system_prompt = (

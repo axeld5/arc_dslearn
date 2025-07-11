@@ -18,6 +18,21 @@ from trl import (
     AutoModelForCausalLMWithValueHead,
 )
 
+def from_jsonable(x):
+    if isinstance(x, dict):
+        if "__frozenset__" in x:
+            return frozenset(from_jsonable(v) for v in x["__frozenset__"])
+        if "__tuple__" in x:
+            return tuple(from_jsonable(v) for v in x["__tuple__"])
+        if "__set__" in x:
+            return set(from_jsonable(v) for v in x["__set__"])
+        if "__str__" in x:
+            return x["__str__"]
+        return {k: from_jsonable(v) for k, v in x.items()}
+    if isinstance(x, list):
+        return [from_jsonable(v) for v in x]
+    return x
+
 # ---------------------------------------------------------------------
 # 0. Paths & constants
 # ---------------------------------------------------------------------
@@ -62,6 +77,8 @@ def to_rl(example):
         msgs, tokenize=False, add_generation_prompt=True
     )
     # keep the full shots list so that reward_fn can check correctness
+    example["shots"] = from_jsonable(example["shots"])
+
     return {"prompt": prompt, "shots": example["shots"]}
 
 ds = raw_ds.map(to_rl, remove_columns=raw_ds.column_names, num_proc=4)
@@ -106,8 +123,9 @@ def safe_exec(code: str) -> types.ModuleType | None:
 def reward_fn(completions, prompts=None, data=None, **_):
     rewards = []
     for code, sample in zip(completions, data):
+        sample_shots = from_jsonable(sample["shots"])
         r = 0.0
-        shots: list[dict] = sample["shots"]
+        shots: list[dict] = sample_shots
 
         # 1. solve(I) present
         if SOLVE_RE.search(code):
