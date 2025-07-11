@@ -162,7 +162,7 @@ collator = DataCollatorForCausalLMWithPadding(tokenizer=tokenizer)
 
 args = TrainingArguments(
     output_dir="qwen25_coder_lora",
-    per_device_train_batch_size=2,
+    per_device_train_batch_size=1,
     gradient_accumulation_steps=8,          # effective 32
     num_train_epochs=3,
     learning_rate=2e-4,

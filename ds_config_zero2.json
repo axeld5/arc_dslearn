@@ -8,5 +8,5 @@
       "contiguous_gradients": true
     },
     "gradient_clipping": 1.0,
-    "train_micro_batch_size_per_gpu": 2
+    "train_micro_batch_size_per_gpu": 1
   }
