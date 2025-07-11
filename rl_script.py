@@ -162,14 +162,16 @@ def reward_fn(completions, shots, **_):
 # ---------------------------------------------------------------------
 grpo_cfg = GRPOConfig(
     output_dir          = "qwen25_coder_grpo",
-    per_device_train_batch_size = 4,
+    per_device_train_batch_size = 2,
     gradient_accumulation_steps = 8,
     num_train_epochs    = 3,
     learning_rate       = 2e-5,
     lr_scheduler_type   = "cosine",
+    logging_steps       = 10,
+    save_steps          = 100,
     # -------- GRPO-specific -----------
-    num_generations     = 8,             # G in the paper
-    max_prompt_length   = 2048,          # leave room for completions
+    num_generations     = 4,             # G in the paper
+    max_prompt_length   = 4096,          # leave room for completions
     max_completion_length = 512,
     remove_unused_columns = False,       # we keep “shots”
     push_to_hub         = False,
