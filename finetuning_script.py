@@ -8,7 +8,7 @@ from transformers import (
 )
 from peft import LoraConfig, get_peft_model
 
-MODEL_NAME = "Qwen/Qwen2.5-Coder-1.5B"          # base (not –Instruct)
+MODEL_NAME = "Qwen/Qwen2.5-Coder-1.5B-Instruct"       # base (not –Instruct)
 DATA_FILE  = "train_split.json"                    # produced by your script
 MAX_LEN    = 4096                                # stay well below 32 k context
 
@@ -21,7 +21,6 @@ model = AutoModelForCausalLM.from_pretrained(
     MODEL_NAME,
     torch_dtype=torch.bfloat16,
     device_map="auto",
-    load_in_4bit=True,              # bitsandbytes
     trust_remote_code=True
 )
 
