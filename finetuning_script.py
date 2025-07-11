@@ -11,7 +11,7 @@ from peft import LoraConfig, get_peft_model
 
 MODEL_NAME = "Qwen/Qwen2.5-Coder-1.5B-Instruct"       # base (not –Instruct)
 DATA_FILE  = "train_split.json"                    # produced by your script
-MAX_LEN    = 4096                                # stay well below 32 k context
+MAX_LEN    = 8192                               # stay well below 32 k context
 
 # 1 . Tokeniser & model (4-bit quant + LoRA)
 tokenizer = AutoTokenizer.from_pretrained(
@@ -66,53 +66,55 @@ raw_ds = load_dataset("json",
                       split="train")
 
 def preprocess(example):
-    """
-    • Input  = system + user  (chat template with <|assistant|> start token)
-    • Labels = assistant reply  (mask the prefix with –100)
-    """
-    # ---- build chat up to assistant ----------------------------------------
-    msgs_prompt = [
+    # Build full message sequence
+    messages = [
         {"role": "system", "content": example["system_prompt"]},
-        {"role": "user",   "content": example["user_prompt"]}
+        {"role": "user", "content": example["user_prompt"]},
+        {"role": "assistant", "content": example["assistant_prompt"]}
     ]
-    prefix = tokenizer.apply_chat_template(
-        msgs_prompt,
+    
+    full_text = tokenizer.apply_chat_template(
+        messages,
         tokenize=False,
-        add_generation_prompt=True     # appends "<|assistant|>"
+        add_generation_prompt=False
     )
-    full_text = prefix + example["assistant_prompt"]
-
-    # Tokenize the full text
+    
+    # Messages without the assistant's message (to compute the prefix)
+    prefix_messages = messages[:-1]
+    prefix_text = tokenizer.apply_chat_template(
+        prefix_messages,
+        tokenize=False,
+        add_generation_prompt=True  # ensures <|assistant|> is added
+    )
+    
+    # Tokenize full and prefix
     full_tokens = tokenizer(
         full_text,
         truncation=True,
         max_length=MAX_LEN,
-        padding=False,
-        return_tensors=None
+        padding=False
     )
-    
-    # Tokenize just the prefix to get the correct length
     prefix_tokens = tokenizer(
-        prefix,
+        prefix_text,
         truncation=True,
         max_length=MAX_LEN,
-        padding=False,
-        return_tensors=None
+        padding=False
     )
     
-    # Create labels - mask the prefix with -100, keep the assistant response
-    labels = full_tokens["input_ids"].copy()
-    prefix_len = len(prefix_tokens["input_ids"])
+    input_ids = full_tokens["input_ids"]
+    attention_mask = full_tokens["attention_mask"]
     
-    # Mask the prefix (system + user + assistant start token)
-    for i in range(min(prefix_len, len(labels))):
-        labels[i] = -100
+    # Mask all tokens up to the assistant's reply
+    labels = input_ids.copy()
+    prefix_len = len(prefix_tokens["input_ids"])
+    labels[:prefix_len] = [-100] * prefix_len
     
     return {
-        "input_ids": full_tokens["input_ids"],
-        "attention_mask": full_tokens["attention_mask"],
+        "input_ids": input_ids,
+        "attention_mask": attention_mask,
         "labels": labels
     }
+
 
 tokenised_ds = raw_ds.map(
     preprocess,

@@ -1,99 +1,16 @@
-#!/usr/bin/env python
-# train_grpo_qwen25_coder.py
-# Python ≥3.9  –  trl ≥0.19.1  –  transformers ≥4.42  –  peft ≥0.10
-
-from __future__ import annotations
+#!/usr/bin/env python3
+import json
 import ast
 import re
-from pathlib import Path
+import types
+import builtins
+import contextlib
+import signal
 from typing import List
 
-import torch
-from datasets import load_dataset
-from transformers import AutoTokenizer, AutoModelForCausalLM
-from peft import PeftModel
-from trl import (
-    GRPOConfig,
-    GRPOTrainer,
-    AutoModelForCausalLMWithValueHead,
-)
-
-def from_jsonable(x):
-    if isinstance(x, dict):
-        if "__frozenset__" in x:
-            return frozenset(from_jsonable(v) for v in x["__frozenset__"])
-        if "__tuple__" in x:
-            return tuple(from_jsonable(v) for v in x["__tuple__"])
-        if "__set__" in x:
-            return set(from_jsonable(v) for v in x["__set__"])
-        if "__str__" in x:
-            return x["__str__"]
-        return {k: from_jsonable(v) for k, v in x.items()}
-    if isinstance(x, list):
-        return [from_jsonable(v) for v in x]
-    return x
-
-# ---------------------------------------------------------------------
-# 0. Paths & constants
-# ---------------------------------------------------------------------
-BASE_MODEL   = "Qwen/Qwen2.5-Coder-1.5B"
-LORA_PATH    = "qwen25_coder_lora/final"         # ← your SFT–LoRA adapter
-DATA_PATH    = "train_split.json"                  # same JSON as before
-MAX_LEN      = 4096
-
-# ---------------------------------------------------------------------
-# 1. Tokenizer (ChatML template)
-# ---------------------------------------------------------------------
-tokenizer = AutoTokenizer.from_pretrained(
-    BASE_MODEL,
-    trust_remote_code=True
-)
-
-# ---------------------------------------------------------------------
-# 2. Policy model  (4-bit + LoRA + value head)
-# ---------------------------------------------------------------------
-base = AutoModelForCausalLM.from_pretrained(
-    BASE_MODEL,
-    torch_dtype=torch.bfloat16,
-    device_map="auto",
-    trust_remote_code=True,
-)
-model = PeftModel.from_pretrained(                          # NEW
-    base,
-    LORA_PATH,
-    is_trainable=True,          # ← **must be True** so LoRA weights get grads
-)
-
-# ---------------------------------------------------------------------
-# 3. Dataset ⇒  {"prompt", "reference"}
-# ---------------------------------------------------------------------
-raw_ds = load_dataset("json", data_files=DATA_PATH, split="train")
-
-def to_rl(example):
-    msgs = [
-        {"role": "system", "content": example["system_prompt"]},
-        {"role": "user",   "content": example["user_prompt"]},
-    ]
-    prompt = tokenizer.apply_chat_template(
-        msgs, tokenize=False, add_generation_prompt=True
-    )
-    # keep the full shots list so that reward_fn can check correctness
-    example["shots"] = from_jsonable(example["shots"])
-
-    return {"prompt": prompt, "shots": example["shots"]}
-
-ds = raw_ds.map(to_rl, remove_columns=raw_ds.column_names, num_proc=4)
-
-# ---------------------------------------------------------------------
-# 4. Helper: list of *public* DSL function names
-# ---------------------------------------------------------------------
+# Import the DSL and from_jsonable function
 import arc_dsl.dsl as dsl
-DSL_FUNCS = {name for name, f in dsl.__dict__.items() if callable(f) and not name.startswith("_")}
 
-# ---------------------------------------------------------------------
-# 5. Improved reward function components
-# ---------------------------------------------------------------------
-import ast, builtins, types, contextlib, io, signal, json, inspect
 from collections import Counter
 
 def canonical(x):
@@ -141,16 +58,32 @@ def equivalent(a, b, shot_inputs=None):
                 return a in max_colors and b in max_colors               # NEW  
     return False
 
-def extract_python_code(text):
-    """Extract Python code from markdown code blocks."""
-    # Match ```python ... ``` blocks
-    pattern = r'```python\s*\n(.*?)\n```'
-    match = re.search(pattern, text, re.DOTALL)
-    if match:
-        return match.group(1).strip()
-    
-    # If no markdown, return as-is (might be plain Python)
-    return text.strip()
+def from_jsonable(x):
+    if isinstance(x, dict):
+        if "__frozenset__" in x:
+            return frozenset(from_jsonable(v) for v in x["__frozenset__"])
+        if "__tuple__" in x:
+            return tuple(from_jsonable(v) for v in x["__tuple__"])
+        if "__set__" in x:
+            return set(from_jsonable(v) for v in x["__set__"])
+        if "__str__" in x:
+            return x["__str__"]
+        return {k: from_jsonable(v) for k, v in x.items()}
+    if isinstance(x, list):
+        return [from_jsonable(v) for v in x]
+    return x
+
+# Copy the reward function components from rl_script.py
+SOLVE_RE = re.compile(r"\bdef\s+solve\s*\(\s*I\s*\)\s*:")
+IMPORT_RE = re.compile(r"^\s*import\s+", re.M)
+
+@contextlib.contextmanager
+def time_limit(seconds: int):
+    def handler(signum, frame): raise TimeoutError()
+    signal.signal(signal.SIGALRM, handler)
+    signal.alarm(seconds)
+    try: yield
+    finally: signal.alarm(0)
 
 def create_smart_wrappers(mod):
     """Attach smart wrappers for every public DSL primitive.
@@ -159,6 +92,8 @@ def create_smart_wrappers(mod):
     and each extracted value is converted with `from_jsonable` before the
     real DSL function is invoked.
     """
+    import inspect
+
     def make_wrapper(dsl_func):
         try:
             sig = inspect.signature(dsl_func)
@@ -208,17 +143,6 @@ def create_smart_wrappers(mod):
         if callable(func) and not name.startswith("_"):
             setattr(mod, name, make_wrapper(func))
 
-SOLVE_RE   = re.compile(r"\bdef\s+solve\s*\(\s*I\s*\)\s*:")
-IMPORT_RE  = re.compile(r"^\s*import\s+", re.M)
-
-@contextlib.contextmanager
-def time_limit(seconds: int):
-    def handler(signum, frame): raise TimeoutError()
-    signal.signal(signal.SIGALRM, handler)
-    signal.alarm(seconds)
-    try: yield
-    finally: signal.alarm(0)
-
 def safe_exec(code: str, input_data=None):
     mod               = types.ModuleType("submission")
     mod.dsl           = dsl
@@ -233,8 +157,8 @@ def safe_exec(code: str, input_data=None):
     # … then replace them with the smart versions
     create_smart_wrappers(mod)
 
-    # make the *entire* input bundle available both as a global 'I'
-    # and as the sole argument that we'll pass to solve()
+    # make the *entire* input bundle available both as a global ‘I’
+    # and as the sole argument that we’ll pass to solve()
     processed = from_jsonable(input_data)
     mod.I     = processed
 
@@ -275,6 +199,7 @@ def reward_fn(completions, shots, **_):
                 # Parse the input - it comes as a JSON string
                 input_data = shot["inputs"]
                 if isinstance(input_data, str):
+                    import json
                     input_data = json.loads(input_data)
                 
                 # Execute with input data context
@@ -305,40 +230,138 @@ def reward_fn(completions, shots, **_):
         rewards.append(r)
     return rewards
 
-# ---------------------------------------------------------------------
-# 5. GRPO config  – add **mandatory** generation parameters
-# ---------------------------------------------------------------------
-grpo_cfg = GRPOConfig(
-    output_dir          = "qwen25_coder_grpo",
-    per_device_train_batch_size = 2,
-    gradient_accumulation_steps = 8,
-    num_train_epochs    = 3,
-    learning_rate       = 2e-5,
-    lr_scheduler_type   = "cosine",
-    logging_steps       = 10,
-    save_steps          = 100,
-    # -------- GRPO-specific -----------
-    num_generations     = 4,             # G in the paper
-    max_prompt_length   = 8192,          # leave room for completions
-    max_completion_length = 128,
-    remove_unused_columns = False,       # we keep "shots"
-    push_to_hub         = False,
-)
+def extract_python_code(text):
+    """Extract Python code from markdown code blocks."""
+    import re
+    # Match ```python ... ``` blocks
+    pattern = r'```python\s*\n(.*?)\n```'
+    match = re.search(pattern, text, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    
+    # If no markdown, return as-is (might be plain Python)
+    return text.strip()
 
-# ---------------------------------------------------------------------
-# 6. Trainer
-#     • `prompt_column` is **not** a valid argument (caused the crash).
-#     • Pass the tokenizer via `processing_class`.
-#     • `reward_funcs` must be **list or callable** – both work, but
-#       passing a list keeps the API identical to the working script.
-# ---------------------------------------------------------------------
-trainer = GRPOTrainer(
-    model              = model,
-    processing_class   = tokenizer,
-    reward_funcs       = [reward_fn],
-    args               = grpo_cfg,
-    train_dataset      = ds,
-)
+def reward_fn_debug(completions, shots, **_):
+    """Debug version of reward function that shows why each component fails."""
+    rewards: List[float] = []
+    for code_raw, shot_list in zip(completions, shots):
+        # Extract Python code from markdown
+        code = extract_python_code(code_raw)
+        
+        shot_list = from_jsonable(shot_list)
+        r = 0.0
+        debug_info = {"extracted_code": code[:100] + "..." if len(code) > 100 else code}
 
-trainer.train()
-trainer.save_model("qwen25_coder_grpo/final")
+        # (1) Solve function present
+        has_solve = SOLVE_RE.search(code)
+        if has_solve:
+            r += 0.1
+            debug_info["solve_function"] = "✓ Found solve function"
+        else:
+            r -= 1.0
+            debug_info["solve_function"] = "✗ No solve function found"
+
+        # (2) No bad imports, only DSL names
+        try:
+            tree = ast.parse(code)
+            bad_imports = bool(IMPORT_RE.search(code))
+            names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
+            dsl_names = set(__import__("arc_dsl.dsl").dsl.__dict__.keys())
+            unknown = names - {"I", "O"} - {f"x{i}" for i in range(1, 100)} - dsl_names
+            
+            debug_info["bad_imports"] = bad_imports
+            debug_info["found_names"] = names
+            debug_info["unknown_names"] = unknown
+            debug_info["dsl_names_count"] = len(dsl_names)
+            
+            if not bad_imports and not unknown:
+                r += 0.1
+                debug_info["dsl_check"] = "✓ All names are valid DSL functions"
+            else:
+                debug_info["dsl_check"] = f"✗ Bad imports: {bad_imports}, Unknown names: {unknown}"
+        except SyntaxError as e:
+            debug_info["dsl_check"] = f"✗ Syntax error: {e}"
+
+        # (3) Functional correctness on all provided shots
+        results = []
+        for i, shot in enumerate(shot_list):
+            try:
+                # Parse the input - it comes as a JSON string
+                input_data = shot["inputs"]
+                if isinstance(input_data, str):
+                    import json
+                    input_data = json.loads(input_data)
+                
+                # Execute with input data context
+                mod = safe_exec(code, input_data)
+                if mod and callable(getattr(mod, "solve", None)):
+                    result = mod.solve(input_data)
+                    
+                    # Parse expected output
+                    expected = shot["output"]
+                    if isinstance(expected, str):
+                        expected = json.loads(expected)
+
+                    expected = from_jsonable(expected) 
+                    match = equivalent(result, expected, input_data)
+                    results.append(match)
+                    if not match:
+                        debug_info[f"shot_{i}_failed"] = f"Got {result}, expected {expected}"
+                else:
+                    results.append(False)
+                    debug_info[f"shot_{i}_error"] = "Could not execute solve function"
+            except Exception as e:
+                results.append(False)
+                debug_info[f"shot_{i}_error"] = str(e)
+        
+        passed = all(results)
+        debug_info["functional_test"] = f"✓ All shots passed" if passed else f"✗ {sum(results)}/{len(results)} shots passed"
+        if passed:
+            r += 0.8
+        
+        rewards.append((r, debug_info))
+    return rewards
+
+def test_all_rewards():
+    """Test if all assistant outputs in train_split.json get reward = 1.0"""
+    
+    # Load the dataset
+    with open("train_split.json", "r") as f:
+        data = json.load(f)
+    
+    print(f"Testing {len(data)} examples from train_split.json")
+    print("=" * 50)
+    
+    perfect_count = 0
+    failed_examples = []
+    
+    # Test just the first 5 examples with debug info
+    for i, example in enumerate(data):
+        assistant_output = example["assistant_prompt"]
+        shots = from_jsonable(example["shots"])
+        
+        # Calculate reward for this single example with debug
+        results = reward_fn_debug([assistant_output], [shots])
+        reward, debug_info = results[0]
+        
+        if reward == 1.0:
+            perfect_count += 1
+        else:
+            print(f"\n=== Example {i+1} ===")
+            print(f"Code: {assistant_output[:200]}...")
+            print(f"Reward: {reward:.2f}")
+            print("Debug info:")
+            for key, value in debug_info.items():
+                print(f"  {key}: {value}")
+            failed_examples.append((i, reward, assistant_output))
+    print(f"Perfect examples (reward = 1.0): {perfect_count}/{len(data)}")
+    
+    return perfect_count == len(data)
+
+if __name__ == "__main__":
+    all_perfect = test_all_rewards()
+    if all_perfect:
+        print("🎉 ALL EXAMPLES GET PERFECT REWARD! 🎉")
+    else:
+        print("❌ Some examples don't get perfect reward.") 
