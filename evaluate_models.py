@@ -18,7 +18,7 @@ BASE_MODEL   = "Qwen/Qwen2.5-Coder-1.5B-Instruct"
 LORA_SFT_DIR = "qwen25_coder_lora/final"
 LORA_RL_DIR  = "qwen25_coder_grpo/final"   # contains value-head
 EVAL_FILE    = "eval_split.json"
-MAX_NEW      = 256
+MAX_NEW      = 128
 TEMPERATURE  = 0.0                         # deterministic
 
 # ------------------------------------------------------------------ util
