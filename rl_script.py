@@ -55,7 +55,6 @@ tokenizer = AutoTokenizer.from_pretrained(
 base = AutoModelForCausalLM.from_pretrained(
     BASE_MODEL,
     torch_dtype=torch.bfloat16,
-    device_map="auto",
     trust_remote_code=True,
 )
 model = PeftModel.from_pretrained(                          # NEW
@@ -323,6 +322,8 @@ grpo_cfg = GRPOConfig(
     max_completion_length = 128,
     remove_unused_columns = False,       # we keep "shots"
     push_to_hub         = False,
+    deepspeed="ds_config_zero2.json",
+    ddp_find_unused_parameters=False
 )
 
 # ---------------------------------------------------------------------
