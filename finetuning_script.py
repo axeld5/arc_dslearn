@@ -92,7 +92,7 @@ def preprocess(example):
         full_text,
         truncation=True,
         max_length=MAX_LEN,
-        padding=False
+        padding=True
     )
     prefix_tokens = tokenizer(
         prefix_text,
