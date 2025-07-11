@@ -56,12 +56,9 @@ base = AutoModelForCausalLM.from_pretrained(
     BASE_MODEL,
     torch_dtype=torch.bfloat16,
     device_map="auto",
-    load_in_4bit=True,
     trust_remote_code=True,
 )
 model = PeftModel.from_pretrained(base, LORA_PATH)   # inject LoRA
-model = AutoModelForCausalLMWithValueHead.from_pretrained(model)  # add V-head
-model.print_trainable_parameters()
 
 # ---------------------------------------------------------------------
 # 3. Dataset ⇒  {"prompt", "reference"}
