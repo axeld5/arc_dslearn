@@ -159,8 +159,7 @@ def reward_fn(completions, prompts=None, data=None, **_):
 # ---------------------------------------------------------------------
 grpo_cfg = GRPOConfig(
     output_dir="qwen25_coder_grpo",
-    per_device_train_batch_size=2,
-    generation_batch_size=4,          # # of prompts to generate in parallel
+    per_device_train_batch_size=4,          # # of prompts to generate in parallel
     gradient_accumulation_steps=8,
     num_train_epochs=3,
     learning_rate=2e-5,
