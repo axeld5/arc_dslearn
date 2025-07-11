@@ -25,7 +25,6 @@ if tokenizer.pad_token is None:
 model = AutoModelForCausalLM.from_pretrained(
     MODEL_NAME,
     torch_dtype=torch.bfloat16,
-    device_map="auto",
     trust_remote_code=True
 )
 
@@ -176,6 +175,8 @@ args = TrainingArguments(
     save_total_limit=2,
     report_to="none",
     remove_unused_columns=False,
+    deepspeed="ds_config_zero2.json",
+    ddp_find_unused_parameters=False
 )
 
 trainer = Trainer(

@@ -1,9 +1,7 @@
 ARC-AGI/
 *.zip
 __pycache__/
-old_code/
 .env
-trainer_output/
 later_use/
-train_set/
 *.json
+!ds_config_zero2.json
