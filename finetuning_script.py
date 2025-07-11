@@ -1,5 +1,6 @@
 from pathlib import Path
 import torch
+import json
 from datasets import load_dataset
 from transformers import (
     AutoTokenizer, AutoModelForCausalLM,
@@ -12,11 +13,15 @@ MODEL_NAME = "Qwen/Qwen2.5-Coder-1.5B-Instruct"       # base (not –Instruct)
 DATA_FILE  = "train_split.json"                    # produced by your script
 MAX_LEN    = 4096                                # stay well below 32 k context
 
-# 1 . Tokeniser & model (4-bit quant + LoRA)
+# 1 . Tokeniser & model (4-bit quant + LoRA)
 tokenizer = AutoTokenizer.from_pretrained(
     MODEL_NAME,
     trust_remote_code=True          # needed for Qwen chat template
 )
+# Add padding token if not present
+if tokenizer.pad_token is None:
+    tokenizer.pad_token = tokenizer.eos_token
+
 model = AutoModelForCausalLM.from_pretrained(
     MODEL_NAME,
     torch_dtype=torch.bfloat16,
@@ -36,11 +41,28 @@ lora_cfg = LoraConfig(
 model = get_peft_model(model, lora_cfg)
 model.print_trainable_parameters()  # sanity-check
 
-# 2 . Dataset ----------------------------------------------------------------
-from datasets import Features, Sequence, Value, load_dataset
+# 2 . Dataset ----------------------------------------------------------------
+# First, preprocess the JSON to ensure consistent data types (same as script.py)
+def preprocess_json_file(input_file, output_file):
+    with open(input_file, 'r') as f:
+        data = json.load(f)
+    
+    # Convert inputs and outputs to JSON strings for consistency
+    for record in data:
+        if record['shots']:
+            for shot in record['shots']:
+                shot['inputs'] = json.dumps(shot['inputs'])
+                shot['output'] = json.dumps(shot['output'])
+    
+    with open(output_file, 'w') as f:
+        json.dump(data, f, indent=2)
 
+# Preprocess the data
+preprocess_json_file("train_split.json", "train_split_processed.json")
+
+# Load the preprocessed dataset
 raw_ds = load_dataset("json",
-                      data_files="train_split.json",
+                      data_files="train_split_processed.json",
                       split="train")
 
 def preprocess(example):
@@ -58,20 +80,39 @@ def preprocess(example):
         tokenize=False,
         add_generation_prompt=True     # appends "<|assistant|>"
     )
-    full  = prefix + example["assistant_prompt"]
+    full_text = prefix + example["assistant_prompt"]
 
-    tok = tokenizer(
-        full,
+    # Tokenize the full text
+    full_tokens = tokenizer(
+        full_text,
         truncation=True,
         max_length=MAX_LEN,
+        padding=False,
         return_tensors=None
     )
-    pref_len = len(
-        tokenizer(prefix, add_special_tokens=False)["input_ids"]
+    
+    # Tokenize just the prefix to get the correct length
+    prefix_tokens = tokenizer(
+        prefix,
+        truncation=True,
+        max_length=MAX_LEN,
+        padding=False,
+        return_tensors=None
     )
-    labels = [-100] * pref_len + tok["input_ids"][pref_len:]
-    tok["labels"] = labels
-    return tok
+    
+    # Create labels - mask the prefix with -100, keep the assistant response
+    labels = full_tokens["input_ids"].copy()
+    prefix_len = len(prefix_tokens["input_ids"])
+    
+    # Mask the prefix (system + user + assistant start token)
+    for i in range(min(prefix_len, len(labels))):
+        labels[i] = -100
+    
+    return {
+        "input_ids": full_tokens["input_ids"],
+        "attention_mask": full_tokens["attention_mask"],
+        "labels": labels
+    }
 
 tokenised_ds = raw_ds.map(
     preprocess,
@@ -79,8 +120,14 @@ tokenised_ds = raw_ds.map(
     num_proc=4
 )
 
-# 3 . Training ---------------------------------------------------------------
-collator = DataCollatorForLanguageModeling(tokenizer, mlm=False)
+# 3 . Training ---------------------------------------------------------------
+# Enable padding in the data collator
+collator = DataCollatorForLanguageModeling(
+    tokenizer=tokenizer, 
+    mlm=False,
+    pad_to_multiple_of=8,  # For better performance
+    return_tensors="pt"
+)
 
 args = TrainingArguments(
     output_dir="qwen25_coder_lora",
@@ -90,12 +137,14 @@ args = TrainingArguments(
     learning_rate=2e-4,
     warmup_steps=100,
     lr_scheduler_type="cosine",
-    fp16=False,                             # we’re already in BF16
+    fp16=False,                             # we're already in BF16
     bf16=True,
     logging_steps=25,
     save_steps=500,
     save_total_limit=2,
-    report_to="none"
+    report_to="none",
+    dataloader_pad_to_multiple_of=8,        # For better performance
+    remove_unused_columns=False,
 )
 
 trainer = Trainer(
@@ -107,3 +156,7 @@ trainer = Trainer(
 
 trainer.train()
 trainer.save_model("qwen25_coder_lora/final")
+
+# Clean up the temporary file
+import os
+os.remove("train_split_processed.json")
