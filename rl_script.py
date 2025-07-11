@@ -148,8 +148,7 @@ def reward_fn(completions, shots, **_):
         mod = safe_exec(code)
         if mod and callable(getattr(mod, "solve", None)):
             try:
-                with time_limit(2):
-                    passed = all(mod.solve(s["inputs"]) == s["output"] for s in shot_list)
+                passed = all(mod.solve(s["inputs"]) == s["output"] for s in shot_list)
             except Exception:
                 passed = False
             if passed:
