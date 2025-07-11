@@ -188,7 +188,3 @@ trainer = Trainer(
 
 trainer.train()
 trainer.save_model("qwen25_coder_lora/final")
-
-# Clean up the temporary file
-import os
-os.remove("train_split_processed.json")
