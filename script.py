@@ -17,11 +17,11 @@ def preprocess_json_file(input_file, output_file):
         json.dump(data, f, indent=2)
 
 # Preprocess the data
-preprocess_json_file("train_split.json", "train_split_processed.json")
+preprocess_json_file("eval_split.json", "eval_split_processed.json")
 
 # Now load the preprocessed dataset
 raw_ds = load_dataset("json",
-                      data_files="train_split_processed.json",
+                      data_files="eval_split_processed.json",
                       split="train")
 
 print(f"Dataset loaded successfully with {len(raw_ds)} examples!")

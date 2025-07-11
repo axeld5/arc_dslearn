@@ -171,7 +171,7 @@ grpo_cfg = GRPOConfig(
     # -------- GRPO-specific -----------
     num_generations     = 4,             # G in the paper
     max_prompt_length   = 4096,          # leave room for completions
-    max_completion_length = 512,
+    max_completion_length = 128,
     remove_unused_columns = False,       # we keep “shots”
     push_to_hub         = False,
 )

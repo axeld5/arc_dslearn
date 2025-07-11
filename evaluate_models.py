@@ -73,7 +73,7 @@ def load_policy(name: str):
         return PeftModel.from_pretrained(base, LORA_SFT_DIR)
     if name == "rl":
         # value-head still works with .generate
-        return AutoModelForCausalLMWithValueHead.from_pretrained(
+        return AutoModelForCausalLM.from_pretrained(
             LORA_RL_DIR, device_map="auto",
             torch_dtype=torch.bfloat16, trust_remote_code=True
         )
