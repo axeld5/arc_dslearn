@@ -127,12 +127,39 @@ tokenised_ds = raw_ds.map(
 
 # 3 . Training ---------------------------------------------------------------
 # Enable padding in the data collator
-collator = DataCollatorForLanguageModeling(
-    tokenizer=tokenizer, 
-    mlm=False,
-    pad_to_multiple_of=8,  # For better performance
-    return_tensors="pt"
-)
+
+from dataclasses import dataclass
+from typing import List, Dict
+import torch
+
+@dataclass
+class DataCollatorForCausalLMWithPadding:
+    tokenizer: AutoTokenizer
+    pad_to_multiple_of: int | None = 8          # keep your 8-byte alignment
+    label_pad_token_id: int = -100              # ignored by the loss
+
+    def __call__(self, features: List[Dict]) -> Dict[str, torch.Tensor]:
+        # 1) pull out labels before calling tokenizer.pad()
+        labels = [feat.pop("labels") for feat in features]
+
+        # 2) pad input_ids & attention_mask
+        batch = self.tokenizer.pad(
+            features,
+            padding=True,
+            pad_to_multiple_of=self.pad_to_multiple_of,
+            return_tensors="pt",
+        )
+
+        # 3) pad labels to the same sequence length – fill with -100
+        max_len = batch["input_ids"].size(1)
+        batch["labels"] = torch.stack([
+            torch.tensor(l + [self.label_pad_token_id] * (max_len - len(l)))
+            for l in labels
+        ])
+
+        return batch
+    
+collator = DataCollatorForCausalLMWithPadding(tokenizer=tokenizer)
 
 args = TrainingArguments(
     output_dir="qwen25_coder_lora",
