@@ -60,6 +60,19 @@ base = AutoModelForCausalLM.from_pretrained(
 )
 model = PeftModel.from_pretrained(base, LORA_PATH)   # inject LoRA
 
+# Ensure model is in training mode and enable gradients
+model.train()
+for param in model.parameters():
+    param.requires_grad = True
+
+# If using LoRA, ensure only LoRA parameters require gradients
+if hasattr(model.pretrained_model, 'peft_config'):
+    for name, param in model.named_parameters():
+        if 'lora_' in name or 'v_head' in name:
+            param.requires_grad = True
+        else:
+            param.requires_grad = False
+
 # ---------------------------------------------------------------------
 # 3. Dataset ⇒  {"prompt", "reference"}
 # ---------------------------------------------------------------------
