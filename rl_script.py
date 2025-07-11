@@ -165,7 +165,6 @@ grpo_cfg = GRPOConfig(
     num_train_epochs=3,
     learning_rate=2e-5,
     lr_scheduler_type="cosine",
-    max_length=MAX_LEN,
     push_to_hub=False,
 )
 
