@@ -143,7 +143,6 @@ args = TrainingArguments(
     save_steps=500,
     save_total_limit=2,
     report_to="none",
-    dataloader_pad_to_multiple_of=8,        # For better performance
     remove_unused_columns=False,
 )
 
