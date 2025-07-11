@@ -132,8 +132,8 @@ def reward_fn(completions, shots, **_):
             tree = ast.parse(code)
             bad_imports = bool(IMPORT_RE.search(code))
             names      = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
-            unknown    = names - set(ALLOWED_BUILTINS) - {"I", "O"} - {
-                f"x{i}" for i in range(1, 20)
+            unknown    = names - {"I", "O"} - {
+                f"x{i}" for i in range(1, 100)
             } - set(__import__("arc_dsl.dsl").dsl.__dict__.keys())
             if not bad_imports and not unknown:
                 r += 0.1
