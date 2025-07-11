@@ -37,7 +37,23 @@ model = get_peft_model(model, lora_cfg)
 model.print_trainable_parameters()  # sanity-check
 
 # 2 . Dataset ----------------------------------------------------------------
-raw_ds = load_dataset("json", data_files=DATA_FILE, split="train")
+from datasets import Features, Sequence, Value, load_dataset
+
+schema = Features({
+    "name": Value("string"),
+    "system_prompt": Value("string"),
+    "user_prompt": Value("string"),
+    "assistant_prompt": Value("string"),
+    "shots": Sequence({
+        "inputs": Value("string"),   # JSON text of the dict is fine
+        "output": Value("string")
+    })
+})
+
+raw_ds = load_dataset("json",
+                      data_files="train_split.json",
+                      split="train",
+                      features=schema)
 
 def preprocess(example):
     """
