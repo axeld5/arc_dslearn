@@ -104,10 +104,13 @@ def preprocess(example):
     input_ids = full_tokens["input_ids"]
     attention_mask = full_tokens["attention_mask"]
     
-    # Mask all tokens up to the assistant's reply
-    labels = input_ids.copy()
+    # Create labels as a proper list copy
+    labels = list(input_ids)  # Ensure it's a flat list
     prefix_len = len(prefix_tokens["input_ids"])
-    labels[:prefix_len] = [-100] * prefix_len
+    
+    # Mask all tokens up to the assistant's reply
+    for i in range(min(prefix_len, len(labels))):
+        labels[i] = -100
     
     return {
         "input_ids": input_ids,
