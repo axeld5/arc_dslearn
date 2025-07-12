@@ -83,7 +83,7 @@ grpo_cfg = GRPOConfig(
     output_dir          = "qwen2.5_1.5b_coder_dslearn_os_rl",
     per_device_train_batch_size = 2,
     gradient_accumulation_steps = 8,
-    num_train_epochs    = 3,
+    num_train_epochs    = 1,
     learning_rate       = 2e-5,
     lr_scheduler_type   = "cosine",
     logging_steps       = 10,
@@ -94,7 +94,7 @@ grpo_cfg = GRPOConfig(
     # -------- GRPO-specific -----------
     num_generations     = 4,             # G in the paper
     max_prompt_length   = 8192,          # leave room for completions
-    max_completion_length = 128,
+    max_completion_length = 64,
     remove_unused_columns = False,       # we keep "shots"
     push_to_hub         = True,
     deepspeed="ds_config_zero2.json",
