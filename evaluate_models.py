@@ -11,7 +11,7 @@ from time import time
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from peft import PeftModel
-from reward_fn_batched import equivalent, safe_exec, extract_python_code
+from reward_fn import equivalent, safe_exec, extract_python_code
 from json_utils import from_jsonable
 
 from collections import Counter

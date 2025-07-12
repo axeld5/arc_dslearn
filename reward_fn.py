@@ -1,6 +1,5 @@
 import arc_dsl.dsl as dsl
 import ast, builtins, types, contextlib, io, signal, json, inspect
-from collections import Counter
 from typing import List
 import re
 from json_utils import from_jsonable

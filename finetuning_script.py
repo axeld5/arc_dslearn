@@ -1,10 +1,7 @@
-from pathlib import Path
 import torch
-import json
 from datasets import load_dataset
 from transformers import (
     AutoTokenizer, AutoModelForCausalLM,
-    DataCollatorForLanguageModeling,
     TrainingArguments, Trainer
 )
 from peft import LoraConfig, get_peft_model

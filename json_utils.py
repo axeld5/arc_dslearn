@@ -1,5 +1,3 @@
-import json
-
 def from_jsonable(x):
     if isinstance(x, dict):
         if "__frozenset__" in x:

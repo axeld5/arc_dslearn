@@ -3,10 +3,6 @@
 # Python ≥3.9  –  trl ≥0.19.1  –  transformers ≥4.42  –  peft ≥0.10
 
 from __future__ import annotations
-import ast
-import re
-from pathlib import Path
-from typing import List
 
 import torch
 from datasets import load_dataset
@@ -15,7 +11,6 @@ from peft import PeftModel
 from trl import (
     GRPOConfig,
     GRPOTrainer,
-    AutoModelForCausalLMWithValueHead,
 )
 from reward_fn import reward_fn
 from json_utils import from_jsonable
