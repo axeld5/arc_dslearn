@@ -185,7 +185,7 @@ args = TrainingArguments(
     logging_dir="tb_logs",              # <- where events get written
     report_to="tensorboard",      
     remove_unused_columns=False,
-    deepspeed="ds_config_zero3.json",
+    deepspeed="ds_config_zero2.json",
     ddp_find_unused_parameters=False,
     push_to_hub=True
 )

@@ -54,13 +54,7 @@ model = PeftModel.from_pretrained(                          # NEW
     is_trainable=True,          # ← **must be True** so LoRA weights get grads
 ).to("cuda")
 
-model.gradient_checkpointing_enable()   # ⬅️ one-liner
-model.config.use_cache = False          # ⚠️ mandatory with gc
-#model = torch.compile(model)            # keep this *after* gc()
-
-# If you train LoRA blocks: enable grads on the base model
-if hasattr(model, "enable_input_require_grads"):
-    model.enable_input_require_grads()
+model = torch.compile(model)            # keep this *after* gc()
 
 # ---------------------------------------------------------------------
 # 3. Dataset ⇒  {"prompt", "reference"}
@@ -103,7 +97,7 @@ grpo_cfg = GRPOConfig(
     max_completion_length = 128,
     remove_unused_columns = False,       # we keep "shots"
     push_to_hub         = True,
-    deepspeed="ds_config_zero3.json",
+    deepspeed="ds_config_zero2.json",
     ddp_find_unused_parameters=False
 )
 
