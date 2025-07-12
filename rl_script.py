@@ -21,8 +21,12 @@ from reward_fn_batched import reward_fn
 from json_utils import from_jsonable
 
 from huggingface_hub import login
+from dotenv import load_dotenv
+import os
 
-login()
+load_dotenv()
+
+login(os.getenv("HF_TOKEN"))
 
 # ---------------------------------------------------------------------
 # 0. Paths & constants
