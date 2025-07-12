@@ -42,7 +42,7 @@ model = get_peft_model(model, lora_cfg).to("cuda")
 model.print_trainable_parameters()  # sanity-check
 model.gradient_checkpointing_enable()   # ⬅️ one-liner
 model.config.use_cache = False          # ⚠️ mandatory with gc
-model = torch.compile(model)            # keep this *after* gc()
+#model = torch.compile(model)            # keep this *after* gc()
 
 # If you train LoRA blocks: enable grads on the base model
 if hasattr(model, "enable_input_require_grads"):
