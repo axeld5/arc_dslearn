@@ -20,6 +20,10 @@ from trl import (
 from reward_fn_batched import reward_fn
 from json_utils import from_jsonable
 
+from huggingface_hub import login
+
+login()
+
 # ---------------------------------------------------------------------
 # 0. Paths & constants
 # ---------------------------------------------------------------------

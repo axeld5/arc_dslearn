@@ -5,6 +5,9 @@ from transformers import (
     TrainingArguments, Trainer
 )
 from peft import LoraConfig, get_peft_model
+from huggingface_hub import login
+
+login()
 
 MODEL_NAME = "Qwen/Qwen2.5-Coder-1.5B-Instruct"       # base (not –Instruct)
 DATA_FILE  = "train_split.json"                    # produced by your script
