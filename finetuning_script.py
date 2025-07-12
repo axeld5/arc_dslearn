@@ -38,7 +38,7 @@ lora_cfg = LoraConfig(
     lora_dropout=0.05,
     task_type="CAUSAL_LM",
 )
-model = get_peft_model(model, lora_cfg)
+model = get_peft_model(model, lora_cfg).to("cuda")
 model.print_trainable_parameters()  # sanity-check
 model.gradient_checkpointing_enable()   # ⬅️ one-liner
 model.config.use_cache = False          # ⚠️ mandatory with gc

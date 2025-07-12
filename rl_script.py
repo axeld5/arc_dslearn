@@ -52,7 +52,7 @@ model = PeftModel.from_pretrained(                          # NEW
     base,
     LORA_PATH,
     is_trainable=True,          # ← **must be True** so LoRA weights get grads
-)
+).to("cuda")
 
 model.gradient_checkpointing_enable()   # ⬅️ one-liner
 model.config.use_cache = False          # ⚠️ mandatory with gc
