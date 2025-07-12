@@ -17,7 +17,7 @@ from trl import (
     GRPOTrainer,
     AutoModelForCausalLMWithValueHead,
 )
-from reward_fn import reward_fn
+from reward_fn_batched import reward_fn
 from json_utils import from_jsonable
 
 # ---------------------------------------------------------------------
@@ -44,12 +44,19 @@ base = AutoModelForCausalLM.from_pretrained(
     trust_remote_code=True,
     attn_implementation="flash_attention_2"
 )
-base = torch.compile(base)
 model = PeftModel.from_pretrained(                          # NEW
     base,
     LORA_PATH,
     is_trainable=True,          # ← **must be True** so LoRA weights get grads
 )
+
+model.gradient_checkpointing_enable()   # ⬅️ one-liner
+model.config.use_cache = False          # ⚠️ mandatory with gc
+model = torch.compile(model)            # keep this *after* gc()
+
+# If you train LoRA blocks: enable grads on the base model
+if hasattr(model, "enable_input_require_grads"):
+    model.enable_input_require_grads()
 
 # ---------------------------------------------------------------------
 # 3. Dataset ⇒  {"prompt", "reference"}

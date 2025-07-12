@@ -3,45 +3,39 @@
 # Python ≥3.9 -- transformers ≥4.42  -- peft ≥0.10
 
 from __future__ import annotations
-import ast, builtins, contextlib, io, json, signal, types, re, inspect
+import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from time import time
-from collections import Counter
 
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from peft import PeftModel
-from reward_fn import equivalent, safe_exec, extract_python_code
+from reward_fn_batched import equivalent, safe_exec, extract_python_code
 from json_utils import from_jsonable
 
 # ------------------------------------------------------------------ paths
 BASE_MODEL   = "Qwen/Qwen2.5-Coder-1.5B-Instruct"
 LORA_SFT_DIR = "qwen25_coder_lora/final"
-LORA_RL_DIR  = "qwen25_coder_grpo/final"   # contains value-head
+LORA_RL_DIR  = "qwen25_coder_grpo/final"
 EVAL_FILE    = "eval_split.json"
+
 MAX_NEW      = 128
 TEMPERATURE  = 0.0                         # deterministic
+BATCH_SIZE   = 16
+NUM_THREADS  = 8
 
-# ------------------------------------------------------------------ util
-import arc_dsl.dsl as dsl
-DSL_FUNCS = {n for n, f in dsl.__dict__.items() if callable(f) and not n.startswith("_")}
-
-# ------------------------------------------------------------------ load eval
-eval_data = json.loads(Path(EVAL_FILE).read_text())
-
-# ------------------------------------------------------------------ tokenizer
-tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL, trust_remote_code=True)
-
-def build_prompt(sample):
-    msgs = [
-        {"role": "system", "content": sample["system_prompt"]},
-        {"role": "user",   "content": sample["user_prompt"]},
-    ]
-    return tokenizer.apply_chat_template(
-        msgs, tokenize=False, add_generation_prompt=True
-    )
+SHOW_SAMPLES = True
+SAMPLE_EVERY = 20
 
 # ------------------------------------------------------------------ models
+def build_prompt(sample, tokenizer):
+    msgs = [
+        {"role": "system", "content": sample["system_prompt"]},
+        {"role": "user", "content": sample["user_prompt"]},
+    ]
+    return tokenizer.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
+
 def load_policy(name: str):
     if name == "base":
         return AutoModelForCausalLM.from_pretrained(
@@ -67,73 +61,92 @@ def load_policy(name: str):
 
 models = {k: load_policy(k).eval() for k in ("base", "sft", "rl")}
 
+raw_eval = json.loads(Path(EVAL_FILE).read_text())
+for sample in raw_eval:
+    shots_py = []
+    for shot in from_jsonable(sample["shots"]):
+        inp = shot["inputs"]
+        if isinstance(inp, str):
+            inp = json.loads(inp)
+        inp = from_jsonable(inp)
+
+        out = shot["output"]
+        if isinstance(out, str):
+            out = json.loads(out)
+        out = from_jsonable(out)
+        
+        shots_py.append({"inputs": inp, "output": out})
+    sample["shots_py"] = shots_py
+
+tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL, trust_remote_code=True)
+if tokenizer.pad_token is None:
+    tokenizer.pad_token = tokenizer.eos_token
+
+prompts = [build_prompt(sample, tokenizer) for sample in raw_eval]
+
 # ------------------------------------------------------------------ evaluation loop
+_module_cache = {}
+
+def check_sample(sample, gen_text) -> bool:
+    """Returns True if the generated solution solves the task."""
+    code = extract_python_code(gen_text)
+    mod = _module_cache.get(code)
+    if mod is None:
+        try:
+            mod = safe_exec(code, sample["shots_py"][0]["inputs"])
+            _module_cache[code] = mod
+        except Exception:
+            return False
+    solve = getattr(mod, "solve", None)
+    if not callable(solve):
+        return False
+    try:
+        for shot in sample["shots_py"]:
+            mod.I = shot["inputs"]
+            if not equivalent(solve(shot["inputs"]), shot["output"], shot["inputs"]):
+                return False
+        return True
+    except Exception:
+        return False
+
+
 def accuracy(model) -> float:
-    print(f"Evaluating model: {model}...")
+    print(f"→ Evaluating model: {model.__class__.__name__}")
     ok = 0
-    for i, sample in enumerate(eval_data):
-        prompt = build_prompt(sample)
-        input_ids = tokenizer(prompt, return_tensors="pt").to(model.device)
+    n = len(raw_eval)
+    for batch_start in range(0, n, BATCH_SIZE):
+        slc = slice(batch_start, batch_start + BATCH_SIZE)
+        batch_prompts = prompts[slc]
+
+        enc = tokenizer(batch_prompts, return_tensors="pt", padding=True).to(model.device)
+        input_lens = enc["attention_mask"].sum(-1)
         with torch.inference_mode():
             gen = model.generate(
-                **input_ids,
+                **enc,
                 max_new_tokens=MAX_NEW,
                 temperature=TEMPERATURE,
-                do_sample=False
+                do_sample=False,
+                use_cache=True,
             )
-        gen_text = tokenizer.decode(gen[0][input_ids.input_ids.shape[-1]:], skip_special_tokens=False)
-
-        # Extract Python code from markdown if present
-        code = extract_python_code(gen_text)
-        
-        # Convert shots to proper format
-        shots = from_jsonable(sample["shots"])
-        
-        # functional check
-        solved = False
-        all_passed = True
-        
-        for shot in shots:
-            try:
-                # Parse the input - it might come as a JSON string
-                input_data = shot["inputs"]
-                if isinstance(input_data, str):
-                    input_data = json.loads(input_data)
-                
-                # Execute with input data context
-                mod = safe_exec(code, input_data)
-                if mod and callable(getattr(mod, "solve", None)):
-                    result = mod.solve(input_data)
-                    
-                    # Parse expected output
-                    expected = shot["output"]
-                    if isinstance(expected, str):
-                        expected = json.loads(expected)
-                    
-                    expected = from_jsonable(expected)
-                    
-                    if not equivalent(result, expected, input_data):
-                        all_passed = False
-                        break
-                else:
-                    all_passed = False
-                    break
-            except Exception:
-                all_passed = False
-                break
-        
-        if all_passed:
-            ok += 1
-            solved = True
-                
-        if i > 0 and i % 10 == 0:
-            print(f"\nSample {i}:")
-            print(f"User prompt: {sample['user_prompt']}")
-            print(f"Generated solution: {gen_text}")
-            print(f"Extracted code: {code}")
-            print(f"Solved correctly: {solved}")
-            
-    return ok / len(eval_data)
+        futures, pool = [], ThreadPoolExecutor(max_workers=NUM_THREADS)
+        for i, sample_idx in enumerate(range(batch_start, min(batch_start+BATCH_SIZE, n))):
+            sample = raw_eval[sample_idx]
+            gen_text = tokenizer.decode(gen[i][input_lens[i]:], skip_special_tokens=False)
+            if SHOW_SAMPLES and i % SAMPLE_EVERY == 0:
+                solved = check_sample(sample, gen_text)
+                ok += int(solved)
+                print(f"\n— sample {sample_idx}…")
+                print(gen_text)
+                print(f"\nSolved: {solved}")
+            else:
+                futures.append(pool.submit(check_sample, sample, gen_text))
+        for fut in as_completed(futures):
+            ok += int(fut.result())
+        pool.shutdown(wait=False)
+        if batch_start % 50 == 0:
+            done = batch_start + len(batch_prompts)
+            print(f"→ Evaluated {done}/{n} tasks ({ok}/{done} correct)")
+    return ok / n
 
 start = time()
 results = {name: accuracy(m) for name, m in models.items()}
@@ -142,4 +155,4 @@ runtime = time() - start
 print("\nFunctional accuracy on eval split:")
 for k, v in results.items():
     print(f" {k:>4}: {v*100:5.1f} %")
-print(f"(processed {len(eval_data)} tasks in {runtime/60:.1f} min)")
+print(f"(processed {len(raw_eval)} tasks in {runtime/60:.1f} min)")

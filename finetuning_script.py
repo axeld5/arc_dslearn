@@ -25,7 +25,6 @@ model = AutoModelForCausalLM.from_pretrained(
     trust_remote_code=True,
     attn_implementation="flash_attention_2"
 )
-model = torch.compile(model)
 
 # LoRA on the attention projection matrices
 lora_cfg = LoraConfig(
@@ -38,6 +37,13 @@ lora_cfg = LoraConfig(
 )
 model = get_peft_model(model, lora_cfg)
 model.print_trainable_parameters()  # sanity-check
+model.gradient_checkpointing_enable()   # ⬅️ one-liner
+model.config.use_cache = False          # ⚠️ mandatory with gc
+model = torch.compile(model)            # keep this *after* gc()
+
+# If you train LoRA blocks: enable grads on the base model
+if hasattr(model, "enable_input_require_grads"):
+    model.enable_input_require_grads()
 
 # 2 . Dataset ----------------------------------------------------------------
 # Load the preprocessed dataset
