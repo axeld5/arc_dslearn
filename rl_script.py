@@ -87,7 +87,7 @@ grpo_cfg = GRPOConfig(
     logging_steps       = 10,
     save_steps          = 100,
     optim='paged_adamw_8bit', 
-    logging_dir="tb_logs",              # <- where events get written
+    logging_dir="rl_tb_logs",              # <- where events get written
     report_to="tensorboard",            # or "wandb", "csv", …
     # -------- GRPO-specific -----------
     num_generations     = 4,             # G in the paper
