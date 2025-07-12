@@ -1,13 +1,13 @@
+from pathlib import Path
 import torch
+import json
 from datasets import load_dataset
 from transformers import (
     AutoTokenizer, AutoModelForCausalLM,
+    DataCollatorForLanguageModeling,
     TrainingArguments, Trainer
 )
 from peft import LoraConfig, get_peft_model
-from huggingface_hub import login
-
-login()
 
 MODEL_NAME = "Qwen/Qwen2.5-Coder-1.5B-Instruct"       # base (not –Instruct)
 DATA_FILE  = "train_split.json"                    # produced by your script
@@ -25,7 +25,7 @@ if tokenizer.pad_token is None:
 model = AutoModelForCausalLM.from_pretrained(
     MODEL_NAME,
     torch_dtype=torch.bfloat16,
-    trust_remote_code=True,
+    trust_remote_code=True
 )
 
 # LoRA on the attention projection matrices
@@ -37,20 +37,31 @@ lora_cfg = LoraConfig(
     lora_dropout=0.05,
     task_type="CAUSAL_LM",
 )
-model = get_peft_model(model, lora_cfg).to("cuda")
+model = get_peft_model(model, lora_cfg)
 model.print_trainable_parameters()  # sanity-check
-model.gradient_checkpointing_enable()   # ⬅️ one-liner
-model.config.use_cache = False          # ⚠️ mandatory with gc
-#model = torch.compile(model)            # keep this *after* gc()
-
-# If you train LoRA blocks: enable grads on the base model
-if hasattr(model, "enable_input_require_grads"):
-    model.enable_input_require_grads()
 
 # 2 . Dataset ----------------------------------------------------------------
+# First, preprocess the JSON to ensure consistent data types (same as script.py)
+def preprocess_json_file(input_file, output_file):
+    with open(input_file, 'r') as f:
+        data = json.load(f)
+    
+    # Convert inputs and outputs to JSON strings for consistency
+    for record in data:
+        if record['shots']:
+            for shot in record['shots']:
+                shot['inputs'] = json.dumps(shot['inputs'])
+                shot['output'] = json.dumps(shot['output'])
+    
+    with open(output_file, 'w') as f:
+        json.dump(data, f, indent=2)
+
+# Preprocess the data
+preprocess_json_file("train_split.json", "train_split_processed.json")
+
 # Load the preprocessed dataset
 raw_ds = load_dataset("json",
-                      data_files="train_split.json",
+                      data_files="train_split_processed.json",
                       split="train")
 
 def preprocess(example):
@@ -150,25 +161,23 @@ class DataCollatorForCausalLMWithPadding:
 collator = DataCollatorForCausalLMWithPadding(tokenizer=tokenizer)
 
 args = TrainingArguments(
-    output_dir="qwen2.5_1.5b_coder_dslearn_os_sft",
+    output_dir="qwen25_coder_lora",
     per_device_train_batch_size=1,
     gradient_accumulation_steps=8,          # effective 32
     num_train_epochs=3,
     learning_rate=2e-4,
     warmup_steps=100,
     lr_scheduler_type="cosine",
-    optim='paged_adamw_8bit', 
     fp16=False,                             # we're already in BF16
     bf16=True,
     logging_steps=25,
     save_steps=500,
     save_total_limit=2,
     logging_dir="tb_logs",              # <- where events get written
-    report_to="tensorboard",            # or "wandb", "csv", …
+    report_to="tensorboard",      
     remove_unused_columns=False,
     deepspeed="ds_config_zero3.json",
-    ddp_find_unused_parameters=False,
-    push_to_hub=True
+    ddp_find_unused_parameters=False
 )
 
 trainer = Trainer(
@@ -179,4 +188,4 @@ trainer = Trainer(
 )
 
 trainer.train()
-trainer.save_model("qwen2.5_1.5b_coder_dslearn_os_sft/final")
+trainer.save_model("qwen25_coder_lora/final")
