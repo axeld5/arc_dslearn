@@ -26,7 +26,6 @@ model = AutoModelForCausalLM.from_pretrained(
     MODEL_NAME,
     torch_dtype=torch.bfloat16,
     trust_remote_code=True,
-    attn_implementation="flash_attention_2"
 )
 
 # LoRA on the attention projection matrices
