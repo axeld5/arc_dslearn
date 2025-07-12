@@ -9,3 +9,5 @@ tf-keras
 deepspeed
 pandas
 matplotlib
+huggingface-hub
+python-dotenv

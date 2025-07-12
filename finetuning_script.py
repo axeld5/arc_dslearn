@@ -8,10 +8,16 @@ from transformers import (
     TrainingArguments, Trainer
 )
 from peft import LoraConfig, get_peft_model
+from huggingface_hub import login
+from dotenv import load_dotenv
 
 MODEL_NAME = "Qwen/Qwen2.5-Coder-1.5B-Instruct"       # base (not –Instruct)
 DATA_FILE  = "train_split.json"                    # produced by your script
 MAX_LEN    = 8192                               # stay well below 32 k context
+
+load_dotenv()
+
+login(os.getenv("HF_TOKEN"))
 
 # 1 . Tokeniser & model (4-bit quant + LoRA)
 tokenizer = AutoTokenizer.from_pretrained(
@@ -178,7 +184,8 @@ args = TrainingArguments(
     report_to="tensorboard",      
     remove_unused_columns=False,
     deepspeed="ds_config_zero3.json",
-    ddp_find_unused_parameters=False
+    ddp_find_unused_parameters=False,
+    push_to_hub=True
 )
 
 trainer = Trainer(
