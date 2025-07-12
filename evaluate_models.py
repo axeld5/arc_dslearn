@@ -14,6 +14,18 @@ from peft import PeftModel
 from reward_fn_batched import equivalent, safe_exec, extract_python_code
 from json_utils import from_jsonable
 
+from collections import Counter
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# ──────────────────────────── bookkeeping dicts ─────────────────────────
+tot_per_fun   = Counter()                              # global frequency
+err_per_fun   = {name: Counter() for name in ("base", "sft", "rl")}
+results       = {}            
+
+                   # overall accuracy
+# ─────────────────────────────────────────────────────────────────────────
+
 # ------------------------------------------------------------------ paths
 BASE_MODEL   = "Qwen/Qwen2.5-Coder-1.5B-Instruct"
 LORA_SFT_DIR = "qwen2.5_1.5b_coder_dslearn_os_sft/final"
@@ -84,6 +96,9 @@ if tokenizer.pad_token is None:
 
 prompts = [build_prompt(sample, tokenizer) for sample in raw_eval]
 
+for sample in raw_eval:               # run *once* before any evaluation
+    tot_per_fun[sample["name"]] += 1      
+
 # ------------------------------------------------------------------ evaluation loop
 _module_cache = {}
 
@@ -109,9 +124,13 @@ def check_sample(sample, gen_text) -> bool:
     except Exception:
         return False
 
+def check_sample_tagged(sample, gen_text):
+    solved = check_sample(sample, gen_text)
+    return sample["name"], solved                 # <─ return both
 
-def accuracy(model) -> float:
-    print(f"→ Evaluating model: {model.__class__.__name__}")
+
+def accuracy(model, tag: str) -> float:
+    print(f"→ Evaluating model: {tag}")
     ok = 0
     n = len(raw_eval)
     for batch_start in range(0, n, BATCH_SIZE):
@@ -133,15 +152,19 @@ def accuracy(model) -> float:
             sample = raw_eval[sample_idx]
             gen_text = tokenizer.decode(gen[i][input_lens[i]:], skip_special_tokens=False)
             if SHOW_SAMPLES and i % SAMPLE_EVERY == 0:
-                solved = check_sample(sample, gen_text)
-                ok += int(solved)
+                name, solved = check_sample_tagged(sample, gen_text)
+                if not solved:
+                    err_per_fun[tag][name] += 1
                 print(f"\n— sample {sample_idx}…")
                 print(gen_text)
                 print(f"\nSolved: {solved}")
             else:
-                futures.append(pool.submit(check_sample, sample, gen_text))
+                futures.append(pool.submit(check_sample_tagged, sample, gen_text))
         for fut in as_completed(futures):
-            ok += int(fut.result())
+            name, solved = fut.result()
+            if not solved:
+                err_per_fun[tag][name] += 1          # ← now every sample counts
+            ok += int(solved)
         pool.shutdown(wait=False)
         if batch_start % 50 == 0:
             done = batch_start + len(batch_prompts)
@@ -149,10 +172,53 @@ def accuracy(model) -> float:
     return ok / n
 
 start = time()
-results = {name: accuracy(m) for name, m in models.items()}
+for tag, model in models.items():
+    results[tag] = accuracy(model, tag)
+
 runtime = time() - start
+# ─────────────────────────────────────────────────────────────────────────
+
+
+# ───────────────────── plot ❶ error-rate per model ───────────────────────
+df_total = pd.DataFrame({"occ": pd.Series(tot_per_fun)})
+
+for tag, counter in err_per_fun.items():
+    df = df_total.copy()
+    df["err"]        = pd.Series(counter).fillna(0).astype(int)
+    df["error_rate"] = df["err"] / df["occ"]
+    top10            = df.sort_values("error_rate", ascending=False).head(10)
+
+    ax = (
+        top10.sort_values("error_rate")["error_rate"]
+        .plot(kind="barh", figsize=(7, 4),
+              title=f"Top-10 DSL primitives by error-rate  ({tag})")
+    )
+    ax.set_xlabel("error rate")
+    ax.set_ylabel("DSL primitive")
+    plt.tight_layout()
+    plt.savefig(f"error_rate_{tag}.png")    # → figure per model
+    plt.close()
+
+# ───────────────────── plot ❷ overall accuracy bar ───────────────────────
+acc_df = (
+    pd.Series(results)
+      .sort_values()
+      .to_frame("accuracy")
+)
+ax = acc_df["accuracy"].plot(
+        kind="barh", figsize=(6, 3),
+        title="Functional accuracy on eval split")
+ax.set_xlabel("accuracy")
+ax.set_xlim(0, 1)
+plt.tight_layout()
+plt.savefig("model_accuracy.png")
+plt.close()
 
 print("\nFunctional accuracy on eval split:")
-for k, v in results.items():
-    print(f" {k:>4}: {v*100:5.1f} %")
+for tag, acc in results.items():
+    print(f"{tag:>4}: {acc*100:5.1f} %")
 print(f"(processed {len(raw_eval)} tasks in {runtime/60:.1f} min)")
+print("\nSaved plots:")
+print(" • model_accuracy.png")
+for tag in err_per_fun:
+    print(f" • error_rate_{tag}.png")

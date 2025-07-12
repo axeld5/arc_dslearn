@@ -7,3 +7,5 @@ accelerate
 trl
 tf-keras
 deepspeed
+pandas
+matplotlib
