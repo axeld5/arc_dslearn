@@ -1,10 +1,7 @@
-from pathlib import Path
 import torch
-import json
 from datasets import load_dataset
 from transformers import (
     AutoTokenizer, AutoModelForCausalLM,
-    DataCollatorForLanguageModeling,
     TrainingArguments, Trainer
 )
 from peft import LoraConfig, get_peft_model
@@ -43,27 +40,9 @@ model = get_peft_model(model, lora_cfg)
 model.print_trainable_parameters()  # sanity-check
 
 # 2 . Dataset ----------------------------------------------------------------
-# First, preprocess the JSON to ensure consistent data types (same as script.py)
-def preprocess_json_file(input_file, output_file):
-    with open(input_file, 'r') as f:
-        data = json.load(f)
-    
-    # Convert inputs and outputs to JSON strings for consistency
-    for record in data:
-        if record['shots']:
-            for shot in record['shots']:
-                shot['inputs'] = json.dumps(shot['inputs'])
-                shot['output'] = json.dumps(shot['output'])
-    
-    with open(output_file, 'w') as f:
-        json.dump(data, f, indent=2)
-
-# Preprocess the data
-preprocess_json_file("train_split.json", "train_split_processed.json")
-
 # Load the preprocessed dataset
 raw_ds = load_dataset("json",
-                      data_files="train_split_processed.json",
+                      data_files="train_split.json",
                       split="train")
 
 def preprocess(example):
