@@ -24,7 +24,7 @@ from json_utils import from_jsonable
 # 0. Paths & constants
 # ---------------------------------------------------------------------
 BASE_MODEL   = "Qwen/Qwen2.5-Coder-1.5B"
-LORA_PATH    = "qwen25_coder_lora/final"         # ← your SFT–LoRA adapter
+LORA_PATH    = "qwen2.5_1.5b_coder_dslearn_os_sft/final"         # ← your SFT–LoRA adapter
 DATA_PATH    = "train_split.json"                  # same JSON as before
 
 # ---------------------------------------------------------------------
@@ -82,7 +82,7 @@ ds = raw_ds.map(to_rl, remove_columns=raw_ds.column_names, num_proc=4)
 # 4. GRPO config  – add **mandatory** generation parameters
 # ---------------------------------------------------------------------
 grpo_cfg = GRPOConfig(
-    output_dir          = "qwen25_coder_grpo",
+    output_dir          = "qwen2.5_1.5b_coder_dslearn_os_rl",
     per_device_train_batch_size = 2,
     gradient_accumulation_steps = 8,
     num_train_epochs    = 3,
@@ -91,12 +91,14 @@ grpo_cfg = GRPOConfig(
     logging_steps       = 10,
     save_steps          = 100,
     optim='paged_adamw_8bit', 
+    logging_dir="tb_logs",              # <- where events get written
+    report_to="tensorboard",            # or "wandb", "csv", …
     # -------- GRPO-specific -----------
     num_generations     = 4,             # G in the paper
     max_prompt_length   = 8192,          # leave room for completions
     max_completion_length = 128,
     remove_unused_columns = False,       # we keep "shots"
-    push_to_hub         = False,
+    push_to_hub         = True,
     deepspeed="ds_config_zero3.json",
     ddp_find_unused_parameters=False
 )
@@ -117,4 +119,4 @@ trainer = GRPOTrainer(
 )
 
 trainer.train()
-trainer.save_model("qwen25_coder_grpo/final")
+trainer.save_model("qwen2.5_1.5b_coder_dslearn_os_rl/final")

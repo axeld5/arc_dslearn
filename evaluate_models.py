@@ -16,8 +16,8 @@ from json_utils import from_jsonable
 
 # ------------------------------------------------------------------ paths
 BASE_MODEL   = "Qwen/Qwen2.5-Coder-1.5B-Instruct"
-LORA_SFT_DIR = "qwen25_coder_lora/final"
-LORA_RL_DIR  = "qwen25_coder_grpo/final"
+LORA_SFT_DIR = "qwen2.5_1.5b_coder_dslearn_os_sft/final"
+LORA_RL_DIR  = "qwen2.5_1.5b_coder_dslearn_os_rl/final"
 EVAL_FILE    = "eval_split.json"
 
 MAX_NEW      = 128

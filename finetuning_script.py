@@ -148,7 +148,7 @@ class DataCollatorForCausalLMWithPadding:
 collator = DataCollatorForCausalLMWithPadding(tokenizer=tokenizer)
 
 args = TrainingArguments(
-    output_dir="qwen25_coder_lora",
+    output_dir="qwen2.5_1.5b_coder_dslearn_os_sft",
     per_device_train_batch_size=1,
     gradient_accumulation_steps=8,          # effective 32
     num_train_epochs=3,
@@ -161,10 +161,12 @@ args = TrainingArguments(
     logging_steps=25,
     save_steps=500,
     save_total_limit=2,
-    report_to="none",
+    logging_dir="tb_logs",              # <- where events get written
+    report_to="tensorboard",            # or "wandb", "csv", …
     remove_unused_columns=False,
     deepspeed="ds_config_zero3.json",
-    ddp_find_unused_parameters=False
+    ddp_find_unused_parameters=False,
+    push_to_hub=True
 )
 
 trainer = Trainer(
@@ -175,4 +177,4 @@ trainer = Trainer(
 )
 
 trainer.train()
-trainer.save_model("qwen25_coder_lora/final")
+trainer.save_model("qwen2.5_1.5b_coder_dslearn_os_sft/final")
