@@ -10,6 +10,7 @@ from typing import (
     get_origin, get_args, Container,
     Union,
 )
+from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # robust, version-independent `get_type_hints`
@@ -338,11 +339,62 @@ def make_block(func: Callable,
     }
 
 # ---------------------------------------------------------------------------
+# 4. preprocessing and train/eval split functionality
+# ---------------------------------------------------------------------------
+def preprocess_json_file(input_file, output_file):
+    """Convert inputs and outputs to JSON strings for consistency"""
+    with open(input_file, 'r') as f:
+        data = json.load(f)
+    
+    # Convert inputs and outputs to JSON strings for consistency
+    for record in data:
+        if record['shots']:
+            for shot in record['shots']:
+                shot['inputs'] = json.dumps(shot['inputs'])
+                shot['output'] = json.dumps(shot['output'])
+    
+    with open(output_file, 'w') as f:
+        json.dump(data, f, indent=2)
+
+def create_train_eval_split(src_file="train_set.json", 
+                           train_out="train_split.json",
+                           eval_out="eval_split.json",
+                           split_seed=42,
+                           eval_frac=0.10):
+    """Split the training data into train and eval sets"""
+    src_path = Path(src_file)
+    train_path = Path(train_out)
+    eval_path = Path(eval_out)
+    
+    data = json.loads(src_path.read_text())
+    random.Random(split_seed).shuffle(data)
+    
+    split = int(len(data) * (1 - eval_frac))
+    train_data, eval_data = data[:split], data[split:]
+    
+    train_path.write_text(json.dumps(train_data, indent=2))
+    eval_path.write_text(json.dumps(eval_data, indent=2))
+    
+    print(f"✓ wrote {len(train_data)} train   → {train_path}")
+    print(f"✓ wrote {len(eval_data)} eval    → {eval_path}")
+    
+    return train_data, eval_data
+
+def prepare_datasets_for_loading():
+    """Preprocess the split files for dataset loading"""
+    # Preprocess both train and eval splits, overwriting original files
+    preprocess_json_file("train_split.json", "train_split.json")
+    preprocess_json_file("eval_split.json", "eval_split.json")
+    
+    print("✓ Preprocessed train_split.json")
+    print("✓ Preprocessed eval_split.json")
+
+# ---------------------------------------------------------------------------
 # 3. iterate over DSL, keep *one-arg* & *non-Callable return*
 # ---------------------------------------------------------------------------
 def main() -> Sequence[dict]:
     blocks = []
-    for _ in range(10):
+    for _ in range(50):
         for name, func in inspect.getmembers(dsl, inspect.isfunction):
             if name.startswith('_'):
                 continue
@@ -376,6 +428,28 @@ def main() -> Sequence[dict]:
 
 
 if __name__ == "__main__":
+    # Step 1: Generate training data
+    print("Step 1: Generating training data...")
+    training_blocks = main()
     with open("train_set.json", "w") as fp:
-        json.dump(main(), fp, indent=2, default=lambda o: pformat(o))
-    print("✓ Wrote train_set.json")
+        json.dump(training_blocks, fp, indent=2, default=lambda o: pformat(o))
+    print(f"✓ Wrote train_set.json with {len(training_blocks)} examples")
+    
+    # Step 2: Create train/eval split
+    print("\nStep 2: Creating train/eval split...")
+    train_data, eval_data = create_train_eval_split()
+    
+    # Step 3: Preprocess for dataset loading
+    print("\nStep 3: Preprocessing for dataset loading...")
+    prepare_datasets_for_loading()
+    
+    print(f"\n✓ Pipeline complete! Ready to use:")
+    print(f"  - train_set.json ({len(training_blocks)} examples)")
+    print(f"  - train_split.json ({len(train_data)} examples)")
+    print(f"  - eval_split.json ({len(eval_data)} examples)")
+    
+    # Optional: Show how to load the datasets
+    print(f"\nTo load the datasets:")
+    print(f"from datasets import load_dataset")
+    print(f"train_ds = load_dataset('json', data_files='train_split.json', split='train')")
+    print(f"eval_ds = load_dataset('json', data_files='eval_split.json', split='train')")

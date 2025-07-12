@@ -39,7 +39,6 @@ def from_jsonable(x):
 BASE_MODEL   = "Qwen/Qwen2.5-Coder-1.5B"
 LORA_PATH    = "qwen25_coder_lora/final"         # ← your SFT–LoRA adapter
 DATA_PATH    = "train_split.json"                  # same JSON as before
-MAX_LEN      = 4096
 
 # ---------------------------------------------------------------------
 # 1. Tokenizer (ChatML template)
@@ -50,7 +49,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 
 # ---------------------------------------------------------------------
-# 2. Policy model  (4-bit + LoRA + value head)
+# 2. Loading model  (LoRA)
 # ---------------------------------------------------------------------
 base = AutoModelForCausalLM.from_pretrained(
     BASE_MODEL,

@@ -3,5 +3,6 @@ ARC-AGI/
 __pycache__/
 .env
 later_use/
+useful_scripts/
 *.json
 !ds_config_zero2.json
