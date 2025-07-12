@@ -1,20 +1,11 @@
 {
   "bf16": { "enabled": true },
   "zero_optimization": {
-    "stage": 3,
-    "stage3_param_persistence_threshold": 1e5,
-    "stage3_max_live_parameters": 2e8,
-    "stage3_max_reuse_distance": 2e8,
-    "overlap_comm": false,
+    "stage": 2,
+    "allgather_partitions": true,
+    "reduce_scatter": true,
+    "overlap_comm": true,
     "contiguous_gradients": true
-  },
-  "activation_checkpointing": {
-    "partition_activations": true,         
-    "contiguous_memory_optimization": true,
-    "cpu_checkpointing": false,            
-    "number_checkpoints": 1,               
-    "synchronize_checkpoint_boundary": false,
-    "profile": false
   },
   "gradient_clipping": 1.0,
   "train_micro_batch_size_per_gpu": 1
