@@ -47,30 +47,11 @@ lora_cfg = LoraConfig(
 )
 model = get_peft_model(model, lora_cfg)
 model.print_trainable_parameters()  # sanity-check
-model = torch.compile(model)
-
-# 2 . Dataset ----------------------------------------------------------------
-# First, preprocess the JSON to ensure consistent data types (same as script.py)
-def preprocess_json_file(input_file, output_file):
-    with open(input_file, 'r') as f:
-        data = json.load(f)
-    
-    # Convert inputs and outputs to JSON strings for consistency
-    for record in data:
-        if record['shots']:
-            for shot in record['shots']:
-                shot['inputs'] = json.dumps(shot['inputs'])
-                shot['output'] = json.dumps(shot['output'])
-    
-    with open(output_file, 'w') as f:
-        json.dump(data, f, indent=2)
-
-# Preprocess the data
-preprocess_json_file("train_split.json", "train_split_processed.json")
+#model = torch.compile(model)
 
 # Load the preprocessed dataset
 raw_ds = load_dataset("json",
-                      data_files="train_split_processed.json",
+                      data_files="train_split.json",
                       split="train")
 
 def preprocess(example):
@@ -170,7 +151,7 @@ class DataCollatorForCausalLMWithPadding:
 collator = DataCollatorForCausalLMWithPadding(tokenizer=tokenizer)
 
 args = TrainingArguments(
-    output_dir="qwen25_coder_lora",
+    output_dir="qwen2.5_1.5b_coder_dslearn_os_sft",
     per_device_train_batch_size=1,
     gradient_accumulation_steps=8,          # effective 32
     num_train_epochs=1,
@@ -198,4 +179,4 @@ trainer = Trainer(
 )
 
 trainer.train()
-trainer.save_model("qwen25_coder_lora/final")
+trainer.save_model("qwen2.5_1.5b_coder_dslearn_os_sft/final")

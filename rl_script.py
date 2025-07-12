@@ -54,8 +54,6 @@ model = PeftModel.from_pretrained(                          # NEW
     is_trainable=True,          # ← **must be True** so LoRA weights get grads
 ).to("cuda")
 
-model = torch.compile(model)            # keep this *after* gc()
-
 # ---------------------------------------------------------------------
 # 3. Dataset ⇒  {"prompt", "reference"}
 # ---------------------------------------------------------------------
