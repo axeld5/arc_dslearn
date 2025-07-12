@@ -55,7 +55,9 @@ base = AutoModelForCausalLM.from_pretrained(
     BASE_MODEL,
     torch_dtype=torch.bfloat16,
     trust_remote_code=True,
+    attn_implementation="flash_attention_2"
 )
+base = torch.compile(base)
 model = PeftModel.from_pretrained(                          # NEW
     base,
     LORA_PATH,
@@ -315,13 +317,14 @@ grpo_cfg = GRPOConfig(
     lr_scheduler_type   = "cosine",
     logging_steps       = 10,
     save_steps          = 100,
+    optim='paged_adamw_8bit', 
     # -------- GRPO-specific -----------
     num_generations     = 4,             # G in the paper
     max_prompt_length   = 8192,          # leave room for completions
     max_completion_length = 128,
     remove_unused_columns = False,       # we keep "shots"
     push_to_hub         = False,
-    deepspeed="ds_config_zero2.json",
+    deepspeed="ds_config_zero3.json",
     ddp_find_unused_parameters=False
 )
 

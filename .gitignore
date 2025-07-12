@@ -1,8 +1,10 @@
-ARC-AGI/
 *.zip
 __pycache__/
 .env
+
+*.json
+!ds_config_zero*.json
+
+ARC-AGI/
 later_use/
 useful_scripts/
-*.json
-!ds_config_zero2.json

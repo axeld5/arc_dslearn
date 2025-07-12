@@ -25,8 +25,10 @@ if tokenizer.pad_token is None:
 model = AutoModelForCausalLM.from_pretrained(
     MODEL_NAME,
     torch_dtype=torch.bfloat16,
-    trust_remote_code=True
+    trust_remote_code=True,
+    attn_implementation="flash_attention_2"
 )
+model = torch.compile(model)
 
 # LoRA on the attention projection matrices
 lora_cfg = LoraConfig(
@@ -168,6 +170,7 @@ args = TrainingArguments(
     learning_rate=2e-4,
     warmup_steps=100,
     lr_scheduler_type="cosine",
+    optim='paged_adamw_8bit', 
     fp16=False,                             # we're already in BF16
     bf16=True,
     logging_steps=25,
@@ -175,7 +178,7 @@ args = TrainingArguments(
     save_total_limit=2,
     report_to="none",
     remove_unused_columns=False,
-    deepspeed="ds_config_zero2.json",
+    deepspeed="ds_config_zero3.json",
     ddp_find_unused_parameters=False
 )
 

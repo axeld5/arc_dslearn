@@ -208,19 +208,22 @@ def load_policy(name: str):
     if name == "base":
         return AutoModelForCausalLM.from_pretrained(
             BASE_MODEL, device_map="auto",
-            torch_dtype=torch.bfloat16, trust_remote_code=True
+            torch_dtype=torch.bfloat16, trust_remote_code=True,
+            attn_implementation="flash_attention_2"
         )
     if name == "sft":
         base = AutoModelForCausalLM.from_pretrained(
             BASE_MODEL, device_map="auto",
-            torch_dtype=torch.bfloat16, trust_remote_code=True
+            torch_dtype=torch.bfloat16, trust_remote_code=True,
+            attn_implementation="flash_attention_2"     
         )
         return PeftModel.from_pretrained(base, LORA_SFT_DIR)
     if name == "rl":
         # value-head still works with .generate
         return AutoModelForCausalLM.from_pretrained(
             LORA_RL_DIR, device_map="auto",
-            torch_dtype=torch.bfloat16, trust_remote_code=True
+            torch_dtype=torch.bfloat16, trust_remote_code=True,
+            attn_implementation="flash_attention_2" 
         )
     raise ValueError(name)
 
