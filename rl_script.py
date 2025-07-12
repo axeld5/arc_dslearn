@@ -17,7 +17,7 @@ from trl import (
     GRPOTrainer,
     AutoModelForCausalLMWithValueHead,
 )
-from reward_fn_batched import reward_fn
+from reward_fn import reward_fn
 from json_utils import from_jsonable
 
 from huggingface_hub import login
