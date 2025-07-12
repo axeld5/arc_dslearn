@@ -47,6 +47,7 @@ lora_cfg = LoraConfig(
 )
 model = get_peft_model(model, lora_cfg)
 model.print_trainable_parameters()  # sanity-check
+model = torch.compile(model)
 
 # 2 . Dataset ----------------------------------------------------------------
 # First, preprocess the JSON to ensure consistent data types (same as script.py)
