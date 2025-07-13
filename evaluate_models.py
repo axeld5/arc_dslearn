@@ -32,7 +32,7 @@ LORA_SFT_DIR = "qwen2.5_1.5b_coder_dslearn_os_sft/final"
 LORA_RL_DIR  = "qwen2.5_1.5b_coder_dslearn_os_rl/final"
 EVAL_FILE    = "eval_split.json"
 
-MAX_NEW      = 128
+MAX_NEW      = 64
 TEMPERATURE  = 0.0                         # deterministic
 BATCH_SIZE   = 16
 NUM_THREADS  = 8
@@ -133,12 +133,9 @@ def accuracy(model, tag: str) -> float:
     print(f"→ Evaluating model: {tag}")
     ok = 0
     n = len(raw_eval)
-    for batch_start in range(0, n, BATCH_SIZE):
-        slc = slice(batch_start, batch_start + BATCH_SIZE)
-        batch_prompts = prompts[slc]
-
-        enc = tokenizer(batch_prompts, return_tensors="pt", padding=True).to(model.device)
-        input_lens = enc["attention_mask"].sum(-1)
+    for i, sample in enumerate(raw_eval):
+        prompt = prompts[i]
+        enc = tokenizer(prompt, return_tensors="pt",).to(model.device)
         with torch.inference_mode():
             gen = model.generate(
                 **enc,
@@ -147,28 +144,15 @@ def accuracy(model, tag: str) -> float:
                 do_sample=False,
                 use_cache=True,
             )
-        futures, pool = [], ThreadPoolExecutor(max_workers=NUM_THREADS)
-        for i, sample_idx in enumerate(range(batch_start, min(batch_start+BATCH_SIZE, n))):
-            sample = raw_eval[sample_idx]
-            gen_text = tokenizer.decode(gen[i][input_lens[i]:], skip_special_tokens=False)
-            if SHOW_SAMPLES and i % SAMPLE_EVERY == 0:
-                name, solved = check_sample_tagged(sample, gen_text)
-                if not solved:
-                    err_per_fun[tag][name] += 1
-                print(f"\n— sample {sample_idx}…")
-                print(gen_text)
-                print(f"\nSolved: {solved}")
-            else:
-                futures.append(pool.submit(check_sample_tagged, sample, gen_text))
-        for fut in as_completed(futures):
-            name, solved = fut.result()
-            if not solved:
-                err_per_fun[tag][name] += 1          # ← now every sample counts
-            ok += int(solved)
-        pool.shutdown(wait=False)
-        if batch_start % 50 == 0:
-            done = batch_start + len(batch_prompts)
-            print(f"→ Evaluated {done}/{n} tasks ({ok}/{done} correct)")
+        gen_text = tokenizer.decode(gen[0][enc.input_ids.shape[-1]:], skip_special_tokens=False)
+        name, solved = check_sample_tagged(sample, gen_text)    # ← now every sample counts
+        ok += int(solved)
+        if not solved:
+            err_per_fun[tag][name] += 1
+        if SHOW_SAMPLES and i % SAMPLE_EVERY == 0:
+            print(f"\n— sample {i}…")
+            print(gen_text)
+            print(f"\nSolved: {solved}")
     return ok / n
 
 start = time()
