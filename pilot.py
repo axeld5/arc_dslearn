@@ -394,7 +394,7 @@ def prepare_datasets_for_loading():
 # ---------------------------------------------------------------------------
 def main() -> Sequence[dict]:
     blocks = []
-    for _ in range(50):
+    for _ in range(20):
         for name, func in inspect.getmembers(dsl, inspect.isfunction):
             if name.startswith('_'):
                 continue
