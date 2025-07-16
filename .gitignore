@@ -4,6 +4,7 @@ __pycache__/
 .venv/
 .ruff_cache/
 .pytest_cache/
+.mypy_cache/
 
 *.json
 !ds_config_zero*.json
