@@ -1,6 +1,7 @@
 *.zip
 __pycache__/
 .env
+.venv/
 
 *.json
 !ds_config_zero*.json
