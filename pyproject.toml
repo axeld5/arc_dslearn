@@ -2,7 +2,7 @@
 name            = "arc-dslearn"
 description     = "Train code-generation models to learn a DSL for solving ARC puzzles"
 version         = "0.1.0"
-authors         = [{name = "Axel D.", email = "axel@example.com"}]
+authors         = [{name = "Axel D.", email = "axeldarmouni@gmail.com"}]
 requires-python = ">=3.10"
 
 dependencies = [
@@ -10,11 +10,12 @@ dependencies = [
     "datasets",
     "transformers",
     "peft",
-    "bitsandbytes",
+    "bitsandbytes==0.42.0; sys_platform == 'darwin'",
+    "bitsandbytes; sys_platform == 'linux'",
     "accelerate",
     "trl",
     "tf-keras",
-    "deepspeed",
+    "deepspeed; sys_platform == 'linux'",
     "pandas",
     "matplotlib",
     "huggingface-hub",
@@ -34,10 +35,20 @@ dev = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/arc_dslearn"]
+
 [tool.ruff]
-extend-select   = ["B", "C4", "D", "I", "SIM"]     # flake-bugs, comprehension, docstrings, imports, similarities
 line-length     = 100
 preview         = true                              # enables Ruff formatter (auto-format)
+
+[tool.ruff.lint]
+extend-select   = ["B", "C4", "D", "I", "SIM"]     # flake-bugs, comprehension, docstrings, imports, similarities
+
+[tool.ruff.lint.per-file-ignores]
+"src/arc_dslearn/arc_dsl/arc_types.py" = ["F401"]
+"src/arc_dslearn/arc_dsl/dsl.py" = ["C417", "SIM102", "C408", "C401", "C400", "D401", "D400", "D415", "F405", "F403", "E741", "D103", "D100", "I001", "F841"]  # Allow star imports and auto-generated code patterns for DSL solvers
+"src/arc_dslearn/arc_dsl/solvers.py" = ["F405", "F403", "E741", "D103", "D100", "I001", "F841"]  # Allow star imports and auto-generated code patterns for DSL solvers
 
 [tool.ruff.format]
 docstring-code-format = true

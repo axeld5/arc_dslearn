@@ -2,6 +2,8 @@
 __pycache__/
 .env
 .venv/
+.ruff_cache/
+.pytest_cache/
 
 *.json
 !ds_config_zero*.json

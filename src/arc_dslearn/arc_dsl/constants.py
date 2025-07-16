@@ -1,3 +1,5 @@
+"""All constants relevant to the DSL."""
+
 F = False
 T = True
 

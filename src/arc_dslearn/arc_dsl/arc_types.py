@@ -1,13 +1,6 @@
-from typing import (
-    List,
-    Union,
-    Tuple,
-    Any,
-    Container,
-    Callable,
-    FrozenSet,
-    Iterable
-)
+"""All typings relevant to the DSL."""
+
+from typing import Any, Callable, Container, FrozenSet, Tuple, Union
 
 Boolean = bool
 Integer = int

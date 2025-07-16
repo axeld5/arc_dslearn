@@ -1,30 +1,34 @@
-#!/usr/bin/env python3
-import json
+"""Module for testing the reward function's validity over the generated data."""
+
 import ast
+import json
 from typing import List
 
-from reward_fn import equivalent, SOLVE_RE, IMPORT_RE, safe_exec
-from json_utils import from_jsonable
+from src.arc_dslearn.json_utils import from_jsonable
+from src.arc_dslearn.reward_fn import IMPORT_RE, SOLVE_RE, equivalent, safe_exec
+
 
 def extract_python_code(text):
     """Extract Python code from markdown code blocks."""
     import re
+
     # Match ```python ... ``` blocks
-    pattern = r'```python\s*\n(.*?)\n```'
+    pattern = r"```python\s*\n(.*?)\n```"
     match = re.search(pattern, text, re.DOTALL)
     if match:
         return match.group(1).strip()
-    
+
     # If no markdown, return as-is (might be plain Python)
     return text.strip()
+
 
 def reward_fn_debug(completions, shots, **_):
     """Debug version of reward function that shows why each component fails."""
     rewards: List[float] = []
-    for code_raw, shot_list in zip(completions, shots):
+    for code_raw, shot_list in zip(completions, shots, strict=False):
         # Extract Python code from markdown
         code = extract_python_code(code_raw)
-        
+
         shot_list = from_jsonable(shot_list)
         r = 0.0
         debug_info = {"extracted_code": code[:100] + "..." if len(code) > 100 else code}
@@ -45,12 +49,12 @@ def reward_fn_debug(completions, shots, **_):
             names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
             dsl_names = set(__import__("arc_dsl.dsl").dsl.__dict__.keys())
             unknown = names - {"I", "O"} - {f"x{i}" for i in range(1, 100)} - dsl_names
-            
+
             debug_info["bad_imports"] = bad_imports
             debug_info["found_names"] = names
             debug_info["unknown_names"] = unknown
             debug_info["dsl_names_count"] = len(dsl_names)
-            
+
             if not bad_imports and not unknown:
                 r += 0.1
                 debug_info["dsl_check"] = "✓ All names are valid DSL functions"
@@ -67,19 +71,20 @@ def reward_fn_debug(completions, shots, **_):
                 input_data = shot["inputs"]
                 if isinstance(input_data, str):
                     import json
+
                     input_data = json.loads(input_data)
-                
+
                 # Execute with input data context
                 mod = safe_exec(code, input_data)
                 if mod and callable(getattr(mod, "solve", None)):
                     result = mod.solve(input_data)
-                    
+
                     # Parse expected output
                     expected = shot["output"]
                     if isinstance(expected, str):
                         expected = json.loads(expected)
 
-                    expected = from_jsonable(expected) 
+                    expected = from_jsonable(expected)
                     match = equivalent(result, expected, input_data)
                     results.append(match)
                     if not match:
@@ -90,41 +95,43 @@ def reward_fn_debug(completions, shots, **_):
             except Exception as e:
                 results.append(False)
                 debug_info[f"shot_{i}_error"] = str(e)
-        
+
         passed = all(results)
-        debug_info["functional_test"] = f"✓ All shots passed" if passed else f"✗ {sum(results)}/{len(results)} shots passed"
+        debug_info["functional_test"] = (
+            "✓ All shots passed" if passed else f"✗ {sum(results)}/{len(results)} shots passed"
+        )
         if passed:
             r += 0.8
-        
+
         rewards.append((r, debug_info))
     return rewards
 
+
 def test_all_rewards():
-    """Test if all assistant outputs in train_split.json get reward = 1.0"""
-    
+    """Test if all assistant outputs in train_split.json get reward = 1.0."""
     # Load the dataset
     with open("train_split.json", "r") as f:
         data = json.load(f)
-    
+
     print(f"Testing {len(data)} examples from train_split.json")
     print("=" * 50)
-    
+
     perfect_count = 0
     failed_examples = []
-    
+
     # Test just the first 5 examples with debug info
     for i, example in enumerate(data):
         assistant_output = example["assistant_prompt"]
         shots = from_jsonable(example["shots"])
-        
+
         # Calculate reward for this single example with debug
         results = reward_fn_debug([assistant_output], [shots])
         reward, debug_info = results[0]
-        
+
         if reward == 1.0:
             perfect_count += 1
         else:
-            print(f"\n=== Example {i+1} ===")
+            print(f"\n=== Example {i + 1} ===")
             print(f"Code: {assistant_output[:200]}...")
             print(f"Reward: {reward:.2f}")
             print("Debug info:")
@@ -132,12 +139,13 @@ def test_all_rewards():
                 print(f"  {key}: {value}")
             failed_examples.append((i, reward, assistant_output))
     print(f"Perfect examples (reward = 1.0): {perfect_count}/{len(data)}")
-    
+
     return perfect_count == len(data)
+
 
 if __name__ == "__main__":
     all_perfect = test_all_rewards()
     if all_perfect:
         print("🎉 ALL EXAMPLES GET PERFECT REWARD! 🎉")
     else:
-        print("❌ Some examples don't get perfect reward.") 
+        print("❌ Some examples don't get perfect reward.")

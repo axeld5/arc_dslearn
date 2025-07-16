@@ -1,3 +1,6 @@
+![CI](https://github.com/axeld5/arc_dslearn/actions/workflows/ci.yml/badge.svg)
+![PyPI](https://img.shields.io/pypi/v/arc-dslearn?color=blue)
+
 # ARC DSL Learning
 
 Training coder models to learn a Domain-Specific Language (DSL) for solving ARC (Abstraction and Reasoning Corpus) problems.
@@ -10,7 +13,7 @@ This project implements a comprehensive DSL for ARC puzzle solving and trains Qw
 
 - **Base Model**: Qwen2.5-Coder-1.5B-Instruct
 - **Fine-tuning**: LoRA adapters
-- **DSL**: 100+ functions for grid operations, object manipulation, mathematical operations, and logical reasoning
+- **DSL**: 100+ functions for grid operations, object manipulation, mathematical operations, and logical reasoning. DSL was made by Michael Hodel and taken from the https://github.com/michaelhodel/arc-dsl repo.
 - **Training**: SFT followed by GRPO (Group Relative Policy Optimization) for RL
 
 ## Performance (Functional Accuracy on 274 eval tasks)

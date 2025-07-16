@@ -1,5 +1,5 @@
-from arc_dsl.dsl import *
-from arc_dsl.constants import *
+from src.arc_dslearn.arc_dsl.dsl import *
+from src.arc_dslearn.arc_dsl.constants import *
 
 
 def solve_67a3c6ac(I):

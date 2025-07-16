@@ -1,12 +1,21 @@
-import arc_dsl.dsl as dsl
-import ast, builtins, types, contextlib, io, signal, json, inspect
-from typing import List
+"""Reward function for the RL script."""
+
+import ast
+import builtins
+import contextlib
+import inspect
+import json
 import re
-from json_utils import from_jsonable
+import signal
+import types
+from typing import List
+
+import src.arc_dslearn.arc_dsl.dsl as dsl
+from src.arc_dslearn.json_utils import from_jsonable
+
 
 def canonical(x):
-    """Return a deterministic representation that ignores order
-    for containers that are *logically* unordered."""
+    """Return a deterministic representation that ignores order for containers that are *logically* unordered."""
     if isinstance(x, (int, float, bool, str)) or x is None:
         return x
 
@@ -25,40 +34,47 @@ def canonical(x):
 
     if isinstance(x, dict):
         return tuple(sorted((k, canonical(v)) for k, v in x.items()))
-    
-    if all(isinstance(v, int) for v in x):          # NEW – scalar tuple
-        return tuple(sorted(x))                    # NEW – deterministic    
+
+    if all(isinstance(v, int) for v in x):  # NEW – scalar tuple
+        return tuple(sorted(x))  # NEW – deterministic
 
     return x
 
+
 def equivalent(a, b, shot_inputs=None):
-    """True if values should be considered equal in ARC-DSL land."""
+    """Return True if values should be considered equal using ARC-DSL."""
     if canonical(a) == canonical(b):
         return True
 
     # special-case: colour ties ------------------------------------------
-    if (isinstance(a, int) and isinstance(b, int) and
-        isinstance(shot_inputs, dict) and 'obj' in shot_inputs):
-        obj = from_jsonable(shot_inputs['obj'])
-        if isinstance(obj, frozenset):          # sanity guard
+    if (
+        isinstance(a, int)
+        and isinstance(b, int)
+        and isinstance(shot_inputs, dict)
+        and "obj" in shot_inputs
+    ):
+        obj = from_jsonable(shot_inputs["obj"])
+        if isinstance(obj, frozenset):  # sanity guard
             colors = {pix for pix, _ in obj}
             if a in colors and b in colors:
-                freq   = {c: dsl.colorcount(obj, c) for c in colors}
+                freq = {c: dsl.colorcount(obj, c) for c in colors}
                 maxcnt = max(freq.values())
                 max_colors = {c for c, f in freq.items() if f == maxcnt}  # NEW
-                return a in max_colors and b in max_colors               # NEW  
+                return a in max_colors and b in max_colors  # NEW
     return False
+
 
 def extract_python_code(text):
     """Extract Python code from markdown code blocks."""
     # Match ```python ... ``` blocks
-    pattern = r'```python\s*\n(.*?)\n```'
+    pattern = r"```python\s*\n(.*?)\n```"
     match = re.search(pattern, text, re.DOTALL)
     if match:
         return match.group(1).strip()
-    
+
     # If no markdown, return as-is (might be plain Python)
     return text.strip()
+
 
 def create_smart_wrappers(mod):
     """Attach smart wrappers for every public DSL primitive.
@@ -67,14 +83,16 @@ def create_smart_wrappers(mod):
     and each extracted value is converted with `from_jsonable` before the
     real DSL function is invoked.
     """
+
     def make_wrapper(dsl_func):
         try:
             sig = inspect.signature(dsl_func)
-        except (TypeError, ValueError):          # C built-ins (bool, int, …)
-            return dsl_func                      # → leave them untouched
+        except (TypeError, ValueError):  # C built-ins (bool, int, …)
+            return dsl_func  # → leave them untouched
 
         param_names = [
-            p.name for p in sig.parameters.values()
+            p.name
+            for p in sig.parameters.values()
             if p.default is p.empty and p.kind is p.POSITIONAL_OR_KEYWORD
         ]
         arity = len(param_names)
@@ -94,8 +112,7 @@ def create_smart_wrappers(mod):
                 # ––– 3. single-parameter convenience –––––––––––––––––––––
                 elif arity == 1:
                     # common synonyms
-                    for k in ('patch', 'obj', 'object', 'piece',
-                              'grid', 'container', 'a'):
+                    for k in ("patch", "obj", "object", "piece", "grid", "container", "a"):
                         if k in bundle:
                             vals = [from_jsonable(bundle[k])]
                             break
@@ -116,22 +133,31 @@ def create_smart_wrappers(mod):
         if callable(func) and not name.startswith("_"):
             setattr(mod, name, make_wrapper(func))
 
-SOLVE_RE   = re.compile(r"\bdef\s+solve\s*\(\s*I\s*\)\s*:")
-IMPORT_RE  = re.compile(r"^\s*import\s+", re.M)
+
+SOLVE_RE = re.compile(r"\bdef\s+solve\s*\(\s*I\s*\)\s*:")
+IMPORT_RE = re.compile(r"^\s*import\s+", re.M)
+
 
 @contextlib.contextmanager
 def time_limit(seconds: int):
-    def handler(signum, frame): raise TimeoutError()
+    """Set a time limit for the code execution."""
+
+    def handler(signum, frame):
+        raise TimeoutError()
+
     signal.signal(signal.SIGALRM, handler)
     signal.alarm(seconds)
-    try: yield
-    finally: signal.alarm(0)
+    try:
+        yield
+    finally:
+        signal.alarm(0)
+
 
 def safe_exec(code: str, input_data=None):
-    mod               = types.ModuleType("submission")
-    mod.dsl           = dsl
-    mod.__builtins__  = {n: getattr(builtins, n) for n in ("range", "len",
-                                                           "enumerate", "zip")}
+    """Execute the code with the input data."""
+    mod = types.ModuleType("submission")
+    mod.dsl = dsl
+    mod.__builtins__ = {n: getattr(builtins, n) for n in ("range", "len", "enumerate", "zip")}
 
     # expose raw DSL names first …
     for name, func in dsl.__dict__.items():
@@ -144,19 +170,20 @@ def safe_exec(code: str, input_data=None):
     # make the *entire* input bundle available both as a global 'I'
     # and as the sole argument that we'll pass to solve()
     processed = from_jsonable(input_data)
-    mod.I     = processed
+    mod.I = processed
 
     with time_limit(2):
         exec(code, mod.__dict__)
     return mod
 
+
 def reward_fn(completions, shots, **_):
     """Reward = 0.1 (format) + 0.1 (DSL only) + 0.8 (all shots pass)."""
     rewards: List[float] = []
-    for code_raw, shot_list in zip(completions, shots):
+    for code_raw, shot_list in zip(completions, shots, strict=False):
         # Extract Python code from markdown
         code = extract_python_code(code_raw)
-        
+
         shot_list = from_jsonable(shot_list)
         r = 0.0
 
@@ -167,10 +194,13 @@ def reward_fn(completions, shots, **_):
         try:
             tree = ast.parse(code)
             bad_imports = bool(IMPORT_RE.search(code))
-            names      = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
-            unknown    = names - {"I", "O"} - {
-                f"x{i}" for i in range(1, 100)
-            } - set(__import__("arc_dsl.dsl").dsl.__dict__.keys())
+            names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
+            unknown = (
+                names
+                - {"I", "O"}
+                - {f"x{i}" for i in range(1, 100)}
+                - set(__import__("arc_dsl.dsl").dsl.__dict__.keys())
+            )
             if not bad_imports and not unknown:
                 r += 0.1
         except SyntaxError:
@@ -184,19 +214,19 @@ def reward_fn(completions, shots, **_):
                 input_data = shot["inputs"]
                 if isinstance(input_data, str):
                     input_data = json.loads(input_data)
-                
+
                 # Execute with input data context
                 mod = safe_exec(code, input_data)
                 if mod and callable(getattr(mod, "solve", None)):
                     result = mod.solve(input_data)
-                    
+
                     # Parse expected output
                     expected = shot["output"]
                     if isinstance(expected, str):
                         expected = json.loads(expected)
 
-                    expected = from_jsonable(expected) 
-                    
+                    expected = from_jsonable(expected)
+
                     if not equivalent(result, expected, input_data):
                         all_passed = False
                         break
@@ -206,9 +236,9 @@ def reward_fn(completions, shots, **_):
             except Exception:
                 all_passed = False
                 break
-        
+
         if all_passed:
             r += 0.8
-            
+
         rewards.append(r)
     return rewards
