@@ -1,12 +1,53 @@
 [project]
-name = "arc-dslearn"
-version = "0.0.1"
-description = "ARC DSL experiments"
+name            = "arc-dslearn"
+description     = "Train code-generation models to learn a DSL for solving ARC puzzles"
+version         = "0.1.0"
+authors         = [{name = "Axel D.", email = "axel@example.com"}]
 requires-python = ">=3.10"
 
-[project.optional-dependencies]
-dev = ["ruff", "pytest"]
+dependencies = [
+    "torch",
+    "datasets",
+    "transformers",
+    "peft",
+    "bitsandbytes",
+    "accelerate",
+    "trl",
+    "tf-keras",
+    "deepspeed",
+    "pandas",
+    "matplotlib",
+    "huggingface-hub",
+    "python-dotenv"
+]
 
-[tool.uv]
-# uv-specific settings (optional)
-python = "3.11"          # interpreter pinned for everyone
+[project.optional-dependencies]
+dev = [
+    "ruff~=0.4",          # lint + format
+    "pytest~=8.2",
+    "hypothesis~=6.104",  # property-based tests for DSL functions
+    "mypy~=1.10",
+    "pre-commit~=3.7"
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+extend-select   = ["B", "C4", "D", "I", "SIM"]     # flake-bugs, comprehension, docstrings, imports, similarities
+line-length     = 100
+preview         = true                              # enables Ruff formatter (auto-format)
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts    = "-ra -q"
+testpaths  = ["tests"]
+
+[tool.mypy]
+python_version     = "3.10"
+strict             = true
+ignore_missing_imports = true
