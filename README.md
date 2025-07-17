@@ -85,10 +85,40 @@ This project implements a comprehensive DSL for ARC puzzle solving and trains Qw
 
 ## Usage
 
-1. **SFT Training**: `uv run python src/arc_dslearn/finetuning_script.py`
-2. **RL Training**: `uv run python src/arc_dslearn/rl_script.py`
-3. **Evaluation**: `uv run python src/arc_dslearn/evaluate_models.py`
-4. **Run tests**: `uv run pytest`
+All scripts should be executed using `uv run` to ensure proper environment and dependency management.
+
+### Core Scripts
+
+1. **Generate Training Data**: 
+   ```bash
+   uv run python -m src.arc_dslearn.data_gene.pilot
+   ```
+
+2. **SFT Training**: 
+   ```bash
+   uv run python src/arc_dslearn/finetuning_script.py
+   ```
+
+3. **RL Training**: 
+   ```bash
+   uv run python src/arc_dslearn/rl_script.py
+   ```
+
+4. **Model Evaluation**: 
+   ```bash
+   uv run python src/arc_dslearn/evaluate_models.py
+   ```
+
+5. **Run Tests**: 
+   ```bash
+   uv run pytest
+   ```
+
+### Important Notes
+
+- **Module Execution**: Some scripts (like the pilot script) should be run as modules using `python -m` to ensure proper import resolution
+- **Environment**: Always use `uv run` to execute scripts to maintain consistent dependency management
+- **GPU Requirements**: Training scripts require CUDA-compatible GPU with 16GB+ memory
 
 ## Next Steps
 
