@@ -4,6 +4,7 @@ description     = "Train code-generation models to learn a DSL for solving ARC p
 version         = "0.1.0"
 authors         = [{name = "Axel D.", email = "axeldarmouni@gmail.com"}]
 requires-python = ">=3.11"
+license = { file = "LICENSE" }
 
 dependencies = [
     "torch",
