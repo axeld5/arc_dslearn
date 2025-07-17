@@ -3,7 +3,7 @@ name            = "arc-dslearn"
 description     = "Train code-generation models to learn a DSL for solving ARC puzzles"
 version         = "0.1.0"
 authors         = [{name = "Axel D.", email = "axeldarmouni@gmail.com"}]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 
 dependencies = [
     "torch",
@@ -59,7 +59,7 @@ addopts    = "-ra -q"
 testpaths  = ["tests"]
 
 [tool.mypy]
-python_version     = "3.10"
+python_version     = "3.11"
 strict             = true
 ignore_missing_imports = true
 exclude = ["^src/arc_dslearn/arc_dsl/"]

@@ -20,14 +20,12 @@ from trl import (
 from src.arc_dslearn.json_utils import from_jsonable
 from src.arc_dslearn.reward_fn import reward_fn
 
-load_dotenv()
-
-login(os.getenv("HF_TOKEN"))
-
 # ---------------------------------------------------------------------
 # 0. Paths & constants
 # ---------------------------------------------------------------------
 if __name__ == "__main__":
+    load_dotenv()
+    login(os.getenv("HF_TOKEN"))
     BASE_MODEL = "Qwen/Qwen2.5-Coder-1.5B"
     LORA_PATH = "qwen2.5_1.5b_coder_dslearn_os_sft/final"  # ← your SFT–LoRA adapter
     DATA_PATH = "train_split.json"  # same JSON as before
