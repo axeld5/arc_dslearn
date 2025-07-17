@@ -35,12 +35,60 @@ This project implements a comprehensive DSL for ARC puzzle solving and trains Qw
 - `evaluate_models.py`: Model evaluation and accuracy measurement
 - `reward_fn.py`: Reward function for RL training
 
+## Setup
+
+### Prerequisites
+
+- Python ≥3.11
+- [UV](https://github.com/astral-sh/uv) - Ultra-fast Python package manager
+
+### Installation
+
+1. **Install UV** (if not already installed):
+   ```bash
+   # On macOS and Linux
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   
+   # On Windows
+   powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+   
+   # Or with pip
+   pip install uv
+   ```
+
+2. **Clone the repository**:
+   ```bash
+   git clone https://github.com/axeld5/arc_dslearn.git
+   cd arc_dslearn
+   ```
+
+3. **Install the project and dependencies**:
+   ```bash
+   # Install the project in development mode with all dependencies
+   uv sync
+   
+   # Or install with development dependencies
+   uv sync --extra dev
+   ```
+
+4. **Activate the virtual environment**:
+   ```bash
+   # UV automatically creates and manages a virtual environment
+   # To run commands in the environment, use:
+   uv run <command>
+   
+   # Or activate the environment manually
+   source .venv/bin/activate  # On macOS/Linux
+   # or
+   .venv\Scripts\activate     # On Windows
+   ```
+
 ## Usage
 
-1. **Install dependencies**: `pip install -r requirements.txt`
-2. **SFT Training**: `python finetuning_script.py`
-3. **RL Training**: `python rl_script.py`
-4. **Evaluation**: `python evaluate_models.py`
+1. **SFT Training**: `uv run python src/arc_dslearn/finetuning_script.py`
+2. **RL Training**: `uv run python src/arc_dslearn/rl_script.py`
+3. **Evaluation**: `uv run python src/arc_dslearn/evaluate_models.py`
+4. **Run tests**: `uv run pytest`
 
 ## Next Steps
 

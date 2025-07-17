@@ -15,8 +15,8 @@ import torch
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from src.arc_dslearn.json_utils import from_jsonable
-from src.arc_dslearn.reward_fn import equivalent, extract_python_code, safe_exec
+from src.arc_dslearn.metrics_and_rewards.reward_fn import equivalent, extract_python_code, safe_exec
+from src.arc_dslearn.utils import from_jsonable
 
 if __name__ == "__main__":
     # ──────────────────────────── bookkeeping dicts ─────────────────────────

@@ -17,8 +17,8 @@ from trl import (
     GRPOTrainer,
 )
 
-from src.arc_dslearn.json_utils import from_jsonable
-from src.arc_dslearn.reward_fn import reward_fn
+from src.arc_dslearn.metrics_and_rewards.reward_fn import reward_fn
+from src.arc_dslearn.utils import from_jsonable
 
 # ---------------------------------------------------------------------
 # 0. Paths & constants

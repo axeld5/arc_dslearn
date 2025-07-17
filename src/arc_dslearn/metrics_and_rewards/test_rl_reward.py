@@ -4,8 +4,8 @@ import ast
 import json
 from typing import Any, Dict, List, Tuple
 
-from src.arc_dslearn.json_utils import from_jsonable
-from src.arc_dslearn.reward_fn import IMPORT_RE, SOLVE_RE, equivalent, safe_exec
+from src.arc_dslearn.metrics_and_rewards.reward_fn import IMPORT_RE, SOLVE_RE, equivalent, safe_exec
+from src.arc_dslearn.utils import from_jsonable
 
 
 def extract_python_code(text: str) -> str:
