@@ -51,7 +51,11 @@ This project implements a comprehensive DSL for ARC puzzle solving and trains Qw
 
 ## Requirements
 
-- Python ≥3.9
+- Python ≥3.11
 - PyTorch, Transformers, PEFT
 - HuggingFace Hub access
 - 16GB+ GPU memory recommended
+
+## License
+
+This project is under the MIT License.
