@@ -8,13 +8,13 @@ import json
 import re
 import signal
 import types
-from typing import List
+from typing import Any, Callable, Dict, Generator, List
 
 import src.arc_dslearn.arc_dsl.dsl as dsl
 from src.arc_dslearn.json_utils import from_jsonable
 
 
-def canonical(x):
+def canonical(x: Any) -> Any:
     """Return a deterministic representation that ignores order for containers that are *logically* unordered."""
     if isinstance(x, (int, float, bool, str)) or x is None:
         return x
@@ -41,7 +41,7 @@ def canonical(x):
     return x
 
 
-def equivalent(a, b, shot_inputs=None):
+def equivalent(a: Any, b: Any, shot_inputs: Dict[str, Any] | None = None) -> bool:
     """Return True if values should be considered equal using ARC-DSL."""
     if canonical(a) == canonical(b):
         return True
@@ -64,7 +64,7 @@ def equivalent(a, b, shot_inputs=None):
     return False
 
 
-def extract_python_code(text):
+def extract_python_code(text: str) -> str:
     """Extract Python code from markdown code blocks."""
     # Match ```python ... ``` blocks
     pattern = r"```python\s*\n(.*?)\n```"
@@ -76,7 +76,7 @@ def extract_python_code(text):
     return text.strip()
 
 
-def create_smart_wrappers(mod):
+def create_smart_wrappers(mod: types.ModuleType) -> None:
     """Attach smart wrappers for every public DSL primitive.
 
     A call like   foo(I)   is translated to   foo(I['a'], I['b'])   (etc.),
@@ -84,7 +84,7 @@ def create_smart_wrappers(mod):
     real DSL function is invoked.
     """
 
-    def make_wrapper(dsl_func):
+    def make_wrapper(dsl_func: Callable[..., Any]) -> Callable[..., Any]:
         try:
             sig = inspect.signature(dsl_func)
         except (TypeError, ValueError):  # C built-ins (bool, int, …)
@@ -97,7 +97,7 @@ def create_smart_wrappers(mod):
         ]
         arity = len(param_names)
 
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             if len(args) == 1 and isinstance(args[0], dict) and not kwargs:
                 bundle = args[0]
 
@@ -139,10 +139,10 @@ IMPORT_RE = re.compile(r"^\s*import\s+", re.M)
 
 
 @contextlib.contextmanager
-def time_limit(seconds: int):
+def time_limit(seconds: int) -> Generator[None, None, None]:
     """Set a time limit for the code execution."""
 
-    def handler(signum, frame):
+    def handler(signum: int, frame: Any) -> None:
         raise TimeoutError()
 
     signal.signal(signal.SIGALRM, handler)
@@ -153,11 +153,11 @@ def time_limit(seconds: int):
         signal.alarm(0)
 
 
-def safe_exec(code: str, input_data=None):
+def safe_exec(code: str, input_data: Any = None) -> types.ModuleType:
     """Execute the code with the input data."""
     mod = types.ModuleType("submission")
-    mod.dsl = dsl
-    mod.__builtins__ = {n: getattr(builtins, n) for n in ("range", "len", "enumerate", "zip")}
+    mod.dsl = dsl  # type: ignore
+    mod.__builtins__ = {n: getattr(builtins, n) for n in ("range", "len", "enumerate", "zip")}  # type: ignore
 
     # expose raw DSL names first …
     for name, func in dsl.__dict__.items():
@@ -170,14 +170,16 @@ def safe_exec(code: str, input_data=None):
     # make the *entire* input bundle available both as a global 'I'
     # and as the sole argument that we'll pass to solve()
     processed = from_jsonable(input_data)
-    mod.I = processed
+    mod.I = processed  # type: ignore
 
     with time_limit(2):
         exec(code, mod.__dict__)
     return mod
 
 
-def reward_fn(completions, shots, **_):
+def reward_fn(
+    completions: List[str], shots: List[List[Dict[str, Any]]], **kwargs: Any
+) -> List[float]:
     """Reward = 0.1 (format) + 0.1 (DSL only) + 0.8 (all shots pass)."""
     rewards: List[float] = []
     for code_raw, shot_list in zip(completions, shots, strict=False):

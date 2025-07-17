@@ -1,7 +1,9 @@
 """Utility functions for JSON handling."""
 
+from typing import Any
 
-def from_jsonable(x):
+
+def from_jsonable(x: Any) -> Any:
     """Convert a JSON-able value to a Python value."""
     if isinstance(x, dict):
         if "__frozenset__" in x:

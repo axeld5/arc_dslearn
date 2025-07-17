@@ -2,13 +2,19 @@
 
 import os
 import platform
+from typing import Any, Dict
 
 import torch
 from datasets import load_dataset
 from dotenv import load_dotenv
 from huggingface_hub import login
 from peft import LoraConfig, get_peft_model
-from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments
+from transformers import (  # type: ignore
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    Trainer,
+    TrainingArguments,
+)
 
 if __name__ == "__main__":
     MODEL_NAME = "Qwen/Qwen2.5-Coder-1.5B-Instruct"  # base (not –Instruct)
@@ -20,7 +26,7 @@ if __name__ == "__main__":
     login(os.getenv("HF_TOKEN"))
 
     # 1 . Tokeniser & model (4-bit quant + LoRA)
-    tokenizer = AutoTokenizer.from_pretrained(
+    tokenizer = AutoTokenizer.from_pretrained(  # type: ignore
         MODEL_NAME,
         trust_remote_code=True,  # needed for Qwen chat template
     )
@@ -30,7 +36,7 @@ if __name__ == "__main__":
 
     attn_impl = "flash_attention_2" if platform.system() == "Linux" else "eager"
 
-    model = AutoModelForCausalLM.from_pretrained(
+    model: AutoModelForCausalLM = AutoModelForCausalLM.from_pretrained(
         MODEL_NAME,
         torch_dtype=torch.bfloat16,
         trust_remote_code=True,
@@ -46,14 +52,14 @@ if __name__ == "__main__":
         lora_dropout=0.05,
         task_type="CAUSAL_LM",
     )
-    model = get_peft_model(model, lora_cfg)
-    model.print_trainable_parameters()  # sanity-check
+    model = get_peft_model(model, lora_cfg)  # type: ignore
+    model.print_trainable_parameters()  # type: ignore
     # model = torch.compile(model)
 
     # Load the preprocessed dataset
     raw_ds = load_dataset("json", data_files="train_split.json", split="train")
 
-    def preprocess(example):
+    def preprocess(example: Dict[str, Any]) -> Dict[str, Any]:
         """Preprocess the dataset."""
         # Build full message sequence
         messages = [
@@ -114,13 +120,13 @@ if __name__ == "__main__":
         pad_to_multiple_of: int | None = 8  # keep your 8-byte alignment
         label_pad_token_id: int = -100  # ignored by the loss
 
-        def __call__(self, features: List[Dict]) -> Dict[str, torch.Tensor]:
+        def __call__(self, features: List[Dict[str, Any]]) -> Dict[str, torch.Tensor]:
             """Call the data collator."""
             # 1) pull out labels before calling tokenizer.pad()
             labels = [feat.pop("labels") for feat in features]
 
             # 2) pad input_ids & attention_mask
-            batch = self.tokenizer.pad(
+            batch = self.tokenizer.pad(  # type: ignore
                 features,
                 padding=True,
                 pad_to_multiple_of=self.pad_to_multiple_of,
@@ -134,7 +140,7 @@ if __name__ == "__main__":
                 for label in labels
             ])
 
-            return batch
+            return batch  # type: ignore
 
     collator = DataCollatorForCausalLMWithPadding(tokenizer=tokenizer)
 
@@ -159,7 +165,7 @@ if __name__ == "__main__":
         push_to_hub=True,
     )
 
-    trainer = Trainer(model=model, args=args, train_dataset=tokenised_ds, data_collator=collator)
+    trainer = Trainer(model=model, args=args, train_dataset=tokenised_ds, data_collator=collator)  # type: ignore
 
-    trainer.train()
-    trainer.save_model("qwen2.5_1.5b_coder_dslearn_os_sft/final")
+    trainer.train()  # type: ignore
+    trainer.save_model("qwen2.5_1.5b_coder_dslearn_os_sft/final")  # type: ignore

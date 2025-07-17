@@ -35,7 +35,7 @@ def rand_color() -> int:
 def rand_grid(max_side: int = 5) -> T.Grid:
     """Generate a random grid."""
     h, w = random.randint(1, max_side), random.randint(1, max_side)
-    return tuple(tuple(rand_color() for _ in range(w)) for _ in range(h))
+    return tuple(tuple(rand_color() for _ in range(w)) for _ in range(h))  # type: ignore[return-value]
 
 
 def rand_object(max_side: int = 5) -> T.Object:
@@ -76,7 +76,7 @@ def rand_int_tuple() -> Tuple[int, int]:
 def rand_int_frozenset() -> FrozenSet[int]:
     """Generate a random frozenset of integers."""
     size = random.randint(1, 5)  # Ensure at least size 1
-    result = set()
+    result: set[int] = set()
     while len(result) < size:
         result.add(random.randint(0, 9))
         # Prevent infinite loop if trying to get more than 10 unique values
@@ -278,7 +278,7 @@ def dsl_functions_summary() -> str:
 DSL_FUNCTIONS_BLOCK = dsl_functions_summary()
 
 
-def to_jsonable(x):
+def to_jsonable(x: Any) -> Any:
     """Convert a value to a JSON-able format."""
     if isinstance(x, frozenset):
         return {"__frozenset__": [to_jsonable(v) for v in sorted(x)]}
@@ -293,7 +293,7 @@ def to_jsonable(x):
     return {"__str__": str(x)}  # last resort
 
 
-def make_block(func: Callable, min_shots: int = 2, max_shots: int = 5) -> dict:
+def make_block(func: Callable[..., Any], min_shots: int = 2, max_shots: int = 5) -> dict[str, Any]:
     """Generate a block of code for a DSL function."""
     sig = inspect.signature(func)
 
@@ -372,7 +372,7 @@ def make_block(func: Callable, min_shots: int = 2, max_shots: int = 5) -> dict:
 # ---------------------------------------------------------------------------
 # 4. preprocessing and train/eval split functionality
 # ---------------------------------------------------------------------------
-def preprocess_json_file(input_file, output_file):
+def preprocess_json_file(input_file: str, output_file: str) -> None:
     """Convert inputs and outputs to JSON strings for consistency."""
     with open(input_file, "r") as f:
         data = json.load(f)
@@ -389,12 +389,12 @@ def preprocess_json_file(input_file, output_file):
 
 
 def create_train_eval_split(
-    src_file="train_set.json",
-    train_out="train_split.json",
-    eval_out="eval_split.json",
-    split_seed=42,
-    eval_frac=0.10,
-):
+    src_file: str = "train_set.json",
+    train_out: str = "train_split.json",
+    eval_out: str = "eval_split.json",
+    split_seed: int = 42,
+    eval_frac: float = 0.10,
+) -> Tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Split the training data into train and eval sets."""
     src_path = Path(src_file)
     train_path = Path(train_out)
@@ -415,7 +415,7 @@ def create_train_eval_split(
     return train_data, eval_data
 
 
-def prepare_datasets_for_loading():
+def prepare_datasets_for_loading() -> None:
     """Preprocess the split files for dataset loading."""
     # Preprocess both train and eval splits, overwriting original files
     preprocess_json_file("train_split.json", "train_split.json")
@@ -428,7 +428,7 @@ def prepare_datasets_for_loading():
 # ---------------------------------------------------------------------------
 # 3. iterate over DSL, keep *one-arg* & *non-Callable return*
 # ---------------------------------------------------------------------------
-def main() -> Sequence[dict]:
+def main() -> Sequence[dict[str, Any]]:
     """Generate blocks of code for DSL functions."""
     blocks = []
     for _ in range(20):

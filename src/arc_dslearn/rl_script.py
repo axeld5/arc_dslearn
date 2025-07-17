@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import platform
+from typing import Any, Dict
 
 import torch
 from datasets import load_dataset
@@ -34,7 +35,7 @@ if __name__ == "__main__":
     # ---------------------------------------------------------------------
     # 1. Tokenizer (ChatML template)
     # ---------------------------------------------------------------------
-    tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL, trust_remote_code=True)  # type: ignore
 
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -43,14 +44,14 @@ if __name__ == "__main__":
     # 2. Loading model  (LoRA)
     # ---------------------------------------------------------------------
     attn_impl = "flash_attention_2" if platform.system() == "Linux" else "eager"
-    base = AutoModelForCausalLM.from_pretrained(
+    base: AutoModelForCausalLM = AutoModelForCausalLM.from_pretrained(
         BASE_MODEL,
         torch_dtype=torch.bfloat16,
         trust_remote_code=True,
         attn_implementation=attn_impl,
     )
-    model = PeftModel.from_pretrained(  # NEW
-        base,
+    model = PeftModel.from_pretrained(
+        base,  # type: ignore
         LORA_PATH,
         is_trainable=True,  # ← **must be True** so LoRA weights get grads
     ).to("cuda")
@@ -60,7 +61,7 @@ if __name__ == "__main__":
     # ---------------------------------------------------------------------
     raw_ds = load_dataset("json", data_files=DATA_PATH, split="train")
 
-    def to_rl(example):
+    def to_rl(example: Dict[str, Any]) -> Dict[str, Any]:
         """Convert the dataset to the RL format."""
         msgs = [
             {"role": "system", "content": example["system_prompt"]},

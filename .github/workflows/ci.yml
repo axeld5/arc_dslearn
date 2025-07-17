@@ -26,8 +26,8 @@ jobs:
         pip install 'hatchling>=1.24' uv
         uv pip install -e .[dev]
     - name: Lint & format
-      run: ruff check --output-format github .
+      run: ruff check --output-format github --exclude 'src/arc_dslearn/arc_dsl' .
     - name: Type-check
-      run: mypy src tests
+      run: mypy src tests --exclude 'src/arc_dslearn/arc_dsl'
     - name: Test
       run: pytest -q

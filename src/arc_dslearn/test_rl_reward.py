@@ -2,13 +2,13 @@
 
 import ast
 import json
-from typing import List
+from typing import Any, Dict, List, Tuple
 
 from src.arc_dslearn.json_utils import from_jsonable
 from src.arc_dslearn.reward_fn import IMPORT_RE, SOLVE_RE, equivalent, safe_exec
 
 
-def extract_python_code(text):
+def extract_python_code(text: str) -> str:
     """Extract Python code from markdown code blocks."""
     import re
 
@@ -22,16 +22,20 @@ def extract_python_code(text):
     return text.strip()
 
 
-def reward_fn_debug(completions, shots, **_):
+def reward_fn_debug(
+    completions: List[str], shots: List[List[Dict[str, Any]]], **kwargs: Any
+) -> List[Tuple[float, Dict[str, Any]]]:
     """Debug version of reward function that shows why each component fails."""
-    rewards: List[float] = []
+    rewards: List[Tuple[float, Dict[str, Any]]] = []
     for code_raw, shot_list in zip(completions, shots, strict=False):
         # Extract Python code from markdown
         code = extract_python_code(code_raw)
 
         shot_list = from_jsonable(shot_list)
         r = 0.0
-        debug_info = {"extracted_code": code[:100] + "..." if len(code) > 100 else code}
+        debug_info: Dict[str, Any] = {
+            "extracted_code": code[:100] + "..." if len(code) > 100 else code
+        }
 
         # (1) Solve function present
         has_solve = SOLVE_RE.search(code)
@@ -107,7 +111,7 @@ def reward_fn_debug(completions, shots, **_):
     return rewards
 
 
-def test_all_rewards():
+def test_all_rewards() -> bool:
     """Test if all assistant outputs in train_split.json get reward = 1.0."""
     # Load the dataset
     with open("train_split.json", "r") as f:

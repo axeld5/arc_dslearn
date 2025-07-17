@@ -7,6 +7,7 @@ import platform
 from collections import Counter
 from pathlib import Path
 from time import time
+from typing import Any, Dict, Tuple
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -19,9 +20,9 @@ from src.arc_dslearn.reward_fn import equivalent, extract_python_code, safe_exec
 
 if __name__ == "__main__":
     # ──────────────────────────── bookkeeping dicts ─────────────────────────
-    tot_per_fun = Counter()  # global frequency
-    err_per_fun = {name: Counter() for name in ("base", "sft", "rl")}
-    results = {}
+    tot_per_fun: Counter[str] = Counter()  # global frequency
+    err_per_fun: Dict[str, Counter[str]] = {name: Counter() for name in ("base", "sft", "rl")}
+    results: Dict[str, float] = {}
 
     # overall accuracy
     # ─────────────────────────────────────────────────────────────────────────
@@ -41,15 +42,15 @@ if __name__ == "__main__":
     SAMPLE_EVERY = 20
 
     # ------------------------------------------------------------------ models
-    def build_prompt(sample, tokenizer):
+    def build_prompt(sample: Dict[str, Any], tokenizer: AutoTokenizer) -> str:
         """Format the prompt."""
         msgs = [
             {"role": "system", "content": sample["system_prompt"]},
             {"role": "user", "content": sample["user_prompt"]},
         ]
-        return tokenizer.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
+        return tokenizer.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)  # type: ignore
 
-    def load_policy(name: str):
+    def load_policy(name: str) -> Any:
         """Load the models depending on name."""
         attn_impl = "flash_attention_2" if platform.system() == "Linux" else "eager"
         if name == "base":
@@ -99,7 +100,7 @@ if __name__ == "__main__":
             shots_py.append({"inputs": inp, "output": out})
         sample["shots_py"] = shots_py
 
-    tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL, trust_remote_code=True)  # type: ignore
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
@@ -109,9 +110,9 @@ if __name__ == "__main__":
         tot_per_fun[sample["name"]] += 1
 
     # ------------------------------------------------------------------ evaluation loop
-    _module_cache = {}
+    _module_cache: Dict[str, Any] = {}
 
-    def check_sample(sample, gen_text) -> bool:
+    def check_sample(sample: Dict[str, Any], gen_text: str) -> bool:
         """Return True if the generated solution solves the task."""
         code = extract_python_code(gen_text)
         mod = _module_cache.get(code)
@@ -126,19 +127,19 @@ if __name__ == "__main__":
             return False
         try:
             for shot in sample["shots_py"]:
-                mod.I = shot["inputs"]
+                mod.I = shot["inputs"]  # type: ignore[union-attr]
                 if not equivalent(solve(shot["inputs"]), shot["output"], shot["inputs"]):
                     return False
             return True
         except Exception:
             return False
 
-    def check_sample_tagged(sample, gen_text):
+    def check_sample_tagged(sample: Dict[str, Any], gen_text: str) -> Tuple[str, bool]:
         """Check sample and returns solved status."""
         solved = check_sample(sample, gen_text)
         return sample["name"], solved  # <─ return both
 
-    def accuracy(model, tag: str) -> float:
+    def accuracy(model: Any, tag: str) -> float:
         """Get model accuracies."""
         print(f"→ Evaluating model: {tag}")
         ok = 0
@@ -169,47 +170,49 @@ if __name__ == "__main__":
                 print(gen_text)
                 print(f"\nSolved: {solved}")
         return ok / n
-        start = time()
-        for tag, model in models.items():
-            results[tag] = accuracy(model, tag)
 
-        runtime = time() - start
-        # ─────────────────────────────────────────────────────────────────────────
+    start = time()
+    for tag, model in models.items():
+        results[tag] = accuracy(model, tag)
 
-        # ───────────────────── plot ❶ error-rate per model ───────────────────────
-        df_total = pd.DataFrame({"occ": pd.Series(tot_per_fun)})
+    runtime = time() - start
 
-        for tag, counter in err_per_fun.items():
-            df = df_total.copy()
-            df["err"] = pd.Series(counter).fillna(0).astype(int)
-            df["error_rate"] = df["err"] / df["occ"]
-            top10 = df.sort_values("error_rate", ascending=False).head(10)
+    # ─────────────────────────────────────────────────────────────────────────
 
-            ax = top10.sort_values("error_rate")["error_rate"].plot(
-                kind="barh", figsize=(7, 4), title=f"Top-10 DSL primitives by error-rate  ({tag})"
-            )
-            ax.set_xlabel("error rate")
-            ax.set_ylabel("DSL primitive")
-            plt.tight_layout()
-            plt.savefig(f"error_rate_{tag}.png")  # → figure per model
-            plt.close()
+    # ───────────────────── plot ❶ error-rate per model ───────────────────────
+    df_total = pd.DataFrame({"occ": pd.Series(tot_per_fun)})
 
-        # ───────────────────── plot ❷ overall accuracy bar ───────────────────────
-        acc_df = pd.Series(results).sort_values().to_frame("accuracy")
-        ax = acc_df["accuracy"].plot(
-            kind="barh", figsize=(6, 3), title="Functional accuracy on eval split"
+    for tag, counter in err_per_fun.items():
+        df = df_total.copy()
+        df["err"] = pd.Series(counter).fillna(0).astype(int)
+        df["error_rate"] = df["err"] / df["occ"]
+        top10 = df.sort_values("error_rate", ascending=False).head(10)
+
+        ax = top10.sort_values("error_rate")["error_rate"].plot(
+            kind="barh", figsize=(7, 4), title=f"Top-10 DSL primitives by error-rate  ({tag})"
         )
-        ax.set_xlabel("accuracy")
-        ax.set_xlim(0, 1)
+        ax.set_xlabel("error rate")
+        ax.set_ylabel("DSL primitive")
         plt.tight_layout()
-        plt.savefig("model_accuracy.png")
+        plt.savefig(f"error_rate_{tag}.png")  # → figure per model
         plt.close()
 
-        print("\nFunctional accuracy on eval split:")
-        for tag, acc in results.items():
-            print(f"{tag:>4}: {acc * 100:5.1f} %")
-        print(f"(processed {len(raw_eval)} tasks in {runtime / 60:.1f} min)")
-        print("\nSaved plots:")
-        print(" • model_accuracy.png")
-        for tag in err_per_fun:
-            print(f" • error_rate_{tag}.png")
+    # ───────────────────── plot ❷ overall accuracy bar ───────────────────────
+    acc_df = pd.Series(results).sort_values().to_frame("accuracy")
+    ax = acc_df["accuracy"].plot(
+        kind="barh", figsize=(6, 3), title="Functional accuracy on eval split"
+    )
+    ax.set_xlabel("accuracy")
+    ax.set_xlim(0, 1)
+    plt.tight_layout()
+    plt.savefig("model_accuracy.png")
+    plt.close()
+
+    print("\nFunctional accuracy on eval split:")
+    for tag, acc in results.items():
+        print(f"{tag:>4}: {acc * 100:5.1f} %")
+    print(f"(processed {len(raw_eval)} tasks in {runtime / 60:.1f} min)")
+    print("\nSaved plots:")
+    print(" • model_accuracy.png")
+    for tag in err_per_fun:
+        print(f" • error_rate_{tag}.png")
