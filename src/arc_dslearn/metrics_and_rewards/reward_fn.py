@@ -10,9 +10,8 @@ import signal
 import types
 from typing import Any, Callable, Dict, Generator, List
 
-from arc_dslearn.utils import from_jsonable
-
 import src.arc_dslearn.arc_dsl.dsl as dsl
+from src.arc_dslearn.utils import from_jsonable
 
 
 def canonical(x: Any) -> Any:
