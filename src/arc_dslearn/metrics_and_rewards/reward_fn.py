@@ -177,7 +177,7 @@ def safe_exec(code: str, input_data: Any = None) -> types.ModuleType:
     return mod
 
 
-def reward_fn(
+def reward_function(
     completions: List[str], shots: List[List[Dict[str, Any]]], **kwargs: Any
 ) -> List[float]:
     """Reward = 0.1 (format) + 0.1 (DSL only) + 0.8 (all shots pass)."""

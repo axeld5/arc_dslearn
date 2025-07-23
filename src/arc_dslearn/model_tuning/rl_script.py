@@ -15,7 +15,7 @@ from trl import (
     GRPOTrainer,
 )
 
-from src.arc_dslearn.metrics_and_rewards.reward_fn import reward_fn
+from src.arc_dslearn.metrics_and_rewards.reward_fn import reward_function
 from src.arc_dslearn.utils import from_jsonable
 
 # ---------------------------------------------------------------------
@@ -130,7 +130,7 @@ if __name__ == "__main__":
     trainer = GRPOTrainer(
         model=model,
         processing_class=tokenizer,
-        reward_funcs=[reward_fn],
+        reward_funcs=[reward_function],
         args=grpo_cfg,
         train_dataset=ds,
     )
