@@ -22,7 +22,8 @@ def dsl_functions_summary() -> str:
         sig = inspect.signature(func)
         ret = sig.return_annotation if sig.return_annotation is not inspect._empty else "Any"
         doc = (func.__doc__ or "").strip().splitlines()[0]
-        lines.append(f"- {name}{sig} -> {ret}: {doc}")
+        lines.append(f"- {name}")
+        #lines.append(f"- {name}{sig} -> {ret}: {doc}")
     return "\n".join(lines)
 
 

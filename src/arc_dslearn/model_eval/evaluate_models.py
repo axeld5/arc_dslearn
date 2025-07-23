@@ -28,9 +28,9 @@ if __name__ == "__main__":
     # ─────────────────────────────────────────────────────────────────────────
 
     # ------------------------------------------------------------------ paths
-    BASE_MODEL = "Qwen/Qwen2.5-Coder-1.5B-Instruct"
-    LORA_SFT_DIR = "qwen2.5_1.5b_coder_dslearn_os_sft_unsloth/final"
-    LORA_RL_DIR = "qwen2.5_1.5b_coder_dslearn_os_rl_unsloth/final"
+    BASE_MODEL = "Qwen/Qwen2.5-Coder-7B-Instruct"
+    LORA_SFT_DIR = "qwen2.5_7b_coder_dslearn_os_sft_unsloth/final"
+    LORA_RL_DIR = "qwen2.5_7b_coder_dslearn_os_rl_unsloth/final"
     EVAL_FILE = "eval_split.json"
 
     MAX_NEW = 64

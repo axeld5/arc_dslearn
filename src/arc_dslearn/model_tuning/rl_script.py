@@ -24,10 +24,10 @@ from ..utils import from_jsonable
 if __name__ == "__main__":
     load_dotenv()
     login(os.getenv("HF_TOKEN"))
-    BASE_MODEL = "Qwen/Qwen2.5-Coder-1.5B-Instruct"
-    LORA_PATH = "qwen2.5_1.5b_coder_dslearn_os_sft_unsloth/final"  # Updated path for Unsloth SFT model
+    BASE_MODEL = "Qwen/Qwen2.5-Coder-7B-Instruct"
+    LORA_PATH = "qwen2.5_7b_coder_dslearn_os_sft_unsloth/final"  # Updated path for Unsloth SFT model
     DATA_PATH = "train_split.json"
-    MAX_LEN = 8192
+    MAX_LEN = 2048
 
     # ---------------------------------------------------------------------
     # 1. Load model and tokenizer with Unsloth optimizations
@@ -94,7 +94,7 @@ if __name__ == "__main__":
     # 4. GRPO config with Unsloth optimizations
     # ---------------------------------------------------------------------
     grpo_cfg = GRPOConfig(
-        output_dir="qwen2.5_1.5b_coder_dslearn_os_rl_unsloth",
+        output_dir="qwen2.5_7b_coder_dslearn_os_rl_unsloth",
         per_device_train_batch_size=2,  # Can increase with Unsloth optimizations
         gradient_accumulation_steps=4,  # Reduced due to higher batch size
         num_train_epochs=1,
@@ -138,7 +138,7 @@ if __name__ == "__main__":
     trainer.train()
     
     # Save the model
-    trainer.save_model("qwen2.5_1.5b_coder_dslearn_os_rl_unsloth/final")
+    trainer.save_model("qwen2.5_7b_coder_dslearn_os_rl_unsloth/final")
     
     # Optional: Save to hub
     model.push_to_hub("axel-darmouni/qwen2.5-coder-arc-dslearn-rl", tokenizer=tokenizer, token=os.getenv("HF_TOKEN"))
