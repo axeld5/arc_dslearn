@@ -1,21 +1,19 @@
-"""RL script for training the model."""
+"""RL script for training the model using Unsloth for faster training."""
 
 from __future__ import annotations
 
 import os
-import platform
 from typing import Any, Dict
 
 import torch
 from datasets import load_dataset
 from dotenv import load_dotenv
 from huggingface_hub import login
-from peft import PeftModel
-from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import (
     GRPOConfig,
     GRPOTrainer,
 )
+from unsloth import FastLanguageModel
 
 from src.arc_dslearn.metrics_and_rewards.reward_fn import reward_fn
 from src.arc_dslearn.utils import from_jsonable
@@ -26,33 +24,52 @@ from src.arc_dslearn.utils import from_jsonable
 if __name__ == "__main__":
     load_dotenv()
     login(os.getenv("HF_TOKEN"))
-    BASE_MODEL = "Qwen/Qwen2.5-Coder-1.5B"
-    LORA_PATH = "qwen2.5_1.5b_coder_dslearn_os_sft/final"  # ← your SFT–LoRA adapter
-    DATA_PATH = "train_split.json"  # same JSON as before
+    BASE_MODEL = "Qwen/Qwen2.5-Coder-1.5B-Instruct"
+    LORA_PATH = "qwen2.5_1.5b_coder_dslearn_os_sft_unsloth/final"  # Updated path for Unsloth SFT model
+    DATA_PATH = "train_split.json"
+    MAX_LEN = 8192
 
     # ---------------------------------------------------------------------
-    # 1. Tokenizer (ChatML template)
+    # 1. Load model and tokenizer with Unsloth optimizations
     # ---------------------------------------------------------------------
-    tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL, trust_remote_code=True)  # type: ignore
+    # First load the base model with Unsloth
+    model, tokenizer = FastLanguageModel.from_pretrained(
+        model_name=BASE_MODEL,
+        max_seq_length=MAX_LEN,
+        dtype=None,  # Auto-detect dtype
+        load_in_4bit=True,  # Use 4-bit quantization for memory efficiency
+        device_map="balanced",
+    )
+
+    # Configure LoRA using Unsloth (for RL fine-tuning)
+    model = FastLanguageModel.get_peft_model(
+        model,
+        r=16,
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
+                       "gate_proj", "up_proj", "down_proj"],
+        lora_alpha=32,
+        lora_dropout=0.05,
+        bias="none",
+        use_gradient_checkpointing="unsloth",  # Unsloth optimization
+        random_state=3407,
+        use_rslora=False,
+        loftq_config=None,
+    )
+
+    # Load weights from the SFT checkpoint if it exists
+    try:
+        # Try to load the adapter weights from the SFT checkpoint
+        import os
+        if os.path.exists(LORA_PATH):
+            print(f"Loading SFT adapter weights from {LORA_PATH}")
+            # Load the saved adapter weights
+            model.load_state_dict(torch.load(f"{LORA_PATH}/adapter_model.bin"), strict=False)
+    except Exception as e:
+        print(f"Could not load SFT weights from {LORA_PATH}: {e}")
+        print("Starting RL training from base model...")
 
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
-
-    # ---------------------------------------------------------------------
-    # 2. Loading model  (LoRA)
-    # ---------------------------------------------------------------------
-    attn_impl = "flash_attention_2" if platform.system() == "Linux" else "eager"
-    base: AutoModelForCausalLM = AutoModelForCausalLM.from_pretrained(
-        BASE_MODEL,
-        torch_dtype=torch.bfloat16,
-        trust_remote_code=True,
-        attn_implementation=attn_impl,
-    )
-    model = PeftModel.from_pretrained(
-        base,  # type: ignore
-        LORA_PATH,
-        is_trainable=True,  # ← **must be True** so LoRA weights get grads
-    ).to("cuda")
 
     # ---------------------------------------------------------------------
     # 3. Dataset ⇒  {"prompt", "reference"}
@@ -74,36 +91,41 @@ if __name__ == "__main__":
     ds = raw_ds.map(to_rl, remove_columns=raw_ds.column_names, num_proc=4)
 
     # ---------------------------------------------------------------------
-    # 4. GRPO config  – add **mandatory** generation parameters
+    # 4. GRPO config with Unsloth optimizations
     # ---------------------------------------------------------------------
     grpo_cfg = GRPOConfig(
-        output_dir="qwen2.5_1.5b_coder_dslearn_os_rl",
-        per_device_train_batch_size=1,
-        gradient_accumulation_steps=8,
+        output_dir="qwen2.5_1.5b_coder_dslearn_os_rl_unsloth",
+        per_device_train_batch_size=2,  # Can increase with Unsloth optimizations
+        gradient_accumulation_steps=4,  # Reduced due to higher batch size
         num_train_epochs=1,
         learning_rate=2e-5,
         lr_scheduler_type="cosine",
+        warmup_steps=50,
         logging_steps=10,
         save_steps=100,
-        optim="paged_adamw_8bit",
-        logging_dir="rl_tb_logs",  # <- where events get written
-        report_to="tensorboard",  # or "wandb", "csv", …
+        save_total_limit=2,
+        optim="adamw_8bit",  # Memory efficient optimizer
+        logging_dir="rl_tb_logs_unsloth",
+        report_to="tensorboard",
         # -------- GRPO-specific -----------
         num_generations=4,  # G in the paper
-        max_prompt_length=8192,  # leave room for completions
+        max_prompt_length=MAX_LEN - 64,  # leave room for completions
         max_completion_length=64,
         remove_unused_columns=False,  # we keep "shots"
         push_to_hub=True,
-        deepspeed="ds_config_zero2.json",
+        fp16=False,
+        bf16=True,
+        seed=3407,
         ddp_find_unused_parameters=False,
     )
 
     # ---------------------------------------------------------------------
-    # 6. Trainer
-    #     • `prompt_column` is **not** a valid argument (caused the crash).
-    #     • Pass the tokenizer via `processing_class`.
-    #     • `reward_funcs` must be **list or callable** – both work, but
-    #       passing a list keeps the API identical to the working script.
+    # 5. Enable faster training with Unsloth
+    # ---------------------------------------------------------------------
+    FastLanguageModel.for_training(model)
+
+    # ---------------------------------------------------------------------
+    # 6. Trainer with Unsloth optimized model
     # ---------------------------------------------------------------------
     trainer = GRPOTrainer(
         model=model,
@@ -114,4 +136,9 @@ if __name__ == "__main__":
     )
 
     trainer.train()
-    trainer.save_model("qwen2.5_1.5b_coder_dslearn_os_rl/final")
+    
+    # Save the model
+    trainer.save_model("qwen2.5_1.5b_coder_dslearn_os_rl_unsloth/final")
+    
+    # Optional: Save to hub
+    model.push_to_hub("axel-darmouni/qwen2.5-coder-arc-dslearn-rl", tokenizer=tokenizer, token=os.getenv("HF_TOKEN"))
