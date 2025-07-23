@@ -201,7 +201,7 @@ def reward_function(
                 names
                 - {"I", "O"}
                 - {f"x{i}" for i in range(1, 100)}
-                - set(__import__("arc_dsl.dsl").dsl.__dict__.keys())
+                - set(__import__("src.arc_dslearn.arc_dsl.dsl").dsl.__dict__.keys())
             )
             if not bad_imports and not unknown:
                 r += 0.1
