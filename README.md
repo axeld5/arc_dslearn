@@ -101,7 +101,7 @@ All scripts should be executed using `uv run` to ensure proper environment and d
 
 3. **RL Training**: 
    ```bash
-   uv run python src/arc_dslearn/model_tuning/rl_script.py
+   uv run python -m arc_dslearn.model_tuning.rl_script
    ```
 
 4. **Model Evaluation**: 

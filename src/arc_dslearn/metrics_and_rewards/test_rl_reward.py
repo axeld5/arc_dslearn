@@ -4,6 +4,7 @@ import ast
 import json
 from typing import Any, Dict, List, Tuple
 
+import src.arc_dslearn.arc_dsl.dsl as dsl
 from src.arc_dslearn.metrics_and_rewards.reward_fn import IMPORT_RE, SOLVE_RE, equivalent, safe_exec
 from src.arc_dslearn.utils import from_jsonable
 
@@ -51,7 +52,7 @@ def reward_fn_debug(
             tree = ast.parse(code)
             bad_imports = bool(IMPORT_RE.search(code))
             names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
-            dsl_names = set(__import__("arc_dsl.dsl").dsl.__dict__.keys())
+            dsl_names = set(dsl.__dict__.keys())
             unknown = names - {"I", "O"} - {f"x{i}" for i in range(1, 100)} - dsl_names
 
             debug_info["bad_imports"] = bad_imports
