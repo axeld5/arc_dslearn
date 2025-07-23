@@ -15,7 +15,7 @@ dependencies = [
     "bitsandbytes; sys_platform == 'linux'",
     "accelerate",
     "trl",
-    "tf-keras",
+    "tf-keras; sys_platform != 'win32'",
     "deepspeed; sys_platform == 'linux'",
     "pandas",
     "matplotlib",
