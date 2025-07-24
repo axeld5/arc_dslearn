@@ -12,8 +12,7 @@ from typing import Any, Dict, Tuple
 import matplotlib.pyplot as plt
 import pandas as pd
 import torch
-from peft import PeftModel
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from unsloth import FastLanguageModel
 
 from src.arc_dslearn.metrics_and_rewards.reward_fn import equivalent, extract_python_code, safe_exec
 from src.arc_dslearn.utils import from_jsonable
@@ -37,12 +36,13 @@ if __name__ == "__main__":
     TEMPERATURE = 0.0  # deterministic
     BATCH_SIZE = 16
     NUM_THREADS = 8
+    MAX_SEQ_LENGTH = 2048
 
     SHOW_SAMPLES = True
     SAMPLE_EVERY = 20
 
     # ------------------------------------------------------------------ models
-    def build_prompt(sample: Dict[str, Any], tokenizer: AutoTokenizer) -> str:
+    def build_prompt(sample: Dict[str, Any], tokenizer: Any) -> str:
         """Format the prompt."""
         msgs = [
             {"role": "system", "content": sample["system_prompt"]},
@@ -51,37 +51,48 @@ if __name__ == "__main__":
         return tokenizer.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)  # type: ignore
 
     def load_policy(name: str) -> Any:
-        """Load the models depending on name."""
-        attn_impl = "flash_attention_2" if platform.system() == "Linux" else "eager"
+        """Load the models using Unsloth for optimal performance."""
         if name == "base":
-            return AutoModelForCausalLM.from_pretrained(
-                BASE_MODEL,
-                device_map="auto",
-                torch_dtype=torch.bfloat16,
-                trust_remote_code=True,
-                attn_implementation=attn_impl,
+            model, _ = FastLanguageModel.from_pretrained(
+                model_name=BASE_MODEL,
+                max_seq_length=MAX_SEQ_LENGTH,
+                dtype=None,  # Auto-detect
+                load_in_4bit=True,
+                device_map="balanced",
             )
-        if name == "sft":
-            base = AutoModelForCausalLM.from_pretrained(
-                BASE_MODEL,
-                device_map="auto",
-                torch_dtype=torch.bfloat16,
-                trust_remote_code=True,
-                attn_implementation=attn_impl,
+            # Enable 2x faster inference
+            FastLanguageModel.for_inference(model)
+            return model
+            
+        elif name == "sft":
+            # Load the SFT LoRA adapter
+            model, _ = FastLanguageModel.from_pretrained(
+                model_name=LORA_SFT_DIR,
+                max_seq_length=MAX_SEQ_LENGTH,
+                dtype=None,  # Auto-detect
+                load_in_4bit=True,
+                device_map="balanced",
             )
-            return PeftModel.from_pretrained(base, LORA_SFT_DIR)
-        if name == "rl":
-            # value-head still works with .generate
-            return AutoModelForCausalLM.from_pretrained(
-                LORA_RL_DIR,
-                device_map="auto",
-                torch_dtype=torch.bfloat16,
-                trust_remote_code=True,
-                attn_implementation=attn_impl,
+            # Enable 2x faster inference
+            FastLanguageModel.for_inference(model)
+            return model
+            
+        elif name == "rl":
+            # Load the RL model (should be saved as a complete model)
+            model, _ = FastLanguageModel.from_pretrained(
+                model_name=LORA_RL_DIR,
+                max_seq_length=MAX_SEQ_LENGTH,
+                dtype=None,  # Auto-detect
+                load_in_4bit=True,
+                device_map="balanced",
             )
-        raise ValueError(name)
+            # Enable 2x faster inference
+            FastLanguageModel.for_inference(model)
+            return model
+            
+        raise ValueError(f"Unknown model name: {name}")
 
-    models = {k: load_policy(k).eval() for k in ("base", "sft", "rl")}
+    models = {k: load_policy(k) for k in ("base", "sft", "rl")}
 
     raw_eval = json.loads(Path(EVAL_FILE).read_text())
     for sample in raw_eval:
@@ -100,7 +111,15 @@ if __name__ == "__main__":
             shots_py.append({"inputs": inp, "output": out})
         sample["shots_py"] = shots_py
 
-    tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL, trust_remote_code=True)  # type: ignore
+    # Load tokenizer using Unsloth (it returns both model and tokenizer)
+    _, tokenizer = FastLanguageModel.from_pretrained(
+        model_name=BASE_MODEL,
+        max_seq_length=MAX_SEQ_LENGTH,
+        dtype=None,
+        load_in_4bit=True,
+        device_map="balanced",
+    )
+    
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
@@ -194,7 +213,7 @@ if __name__ == "__main__":
         ax.set_xlabel("error rate")
         ax.set_ylabel("DSL primitive")
         plt.tight_layout()
-        plt.savefig(f"error_rate_{tag}.png")  # → figure per model
+        plt.savefig(f"chart_results/error_rate_{tag}.png")  # → figure per model
         plt.close()
 
     # ───────────────────── plot ❷ overall accuracy bar ───────────────────────
@@ -205,7 +224,7 @@ if __name__ == "__main__":
     ax.set_xlabel("accuracy")
     ax.set_xlim(0, 1)
     plt.tight_layout()
-    plt.savefig("model_accuracy.png")
+    plt.savefig("chart_results/model_accuracy.png")
     plt.close()
 
     print("\nFunctional accuracy on eval split:")
@@ -213,6 +232,6 @@ if __name__ == "__main__":
         print(f"{tag:>4}: {acc * 100:5.1f} %")
     print(f"(processed {len(raw_eval)} tasks in {runtime / 60:.1f} min)")
     print("\nSaved plots:")
-    print(" • model_accuracy.png")
+    print(" • chart_results/model_accuracy.png")
     for tag in err_per_fun:
-        print(f" • error_rate_{tag}.png")
+        print(f" • chart_results/error_rate_{tag}.png")

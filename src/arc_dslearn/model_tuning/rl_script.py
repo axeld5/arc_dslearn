@@ -27,7 +27,7 @@ if __name__ == "__main__":
     BASE_MODEL = "Qwen/Qwen2.5-Coder-7B-Instruct"
     LORA_PATH = "qwen2.5_7b_coder_dslearn_os_sft_unsloth/final"  # Updated path for Unsloth SFT model
     DATA_PATH = "train_split.json"
-    MAX_LEN = 2048
+    MAX_LEN = 8192
 
     # ---------------------------------------------------------------------
     # 1. Load model and tokenizer with Unsloth optimizations

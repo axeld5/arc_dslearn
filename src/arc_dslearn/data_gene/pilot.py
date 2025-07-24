@@ -13,10 +13,12 @@ from .block_generation import make_block, should_skip_function
 from .data_processing import create_train_eval_split, prepare_datasets_for_loading
 
 
-def main() -> Sequence[dict[str, Any]]:
+def main(generation_seed: int = 42) -> Sequence[dict[str, Any]]:
     """Generate blocks of code for DSL functions."""
     blocks = []
-    for _ in range(20):
+    block_counter = 0
+    
+    for round_num in range(20):
         for name, func in inspect.getmembers(dsl, inspect.isfunction):
             if name.startswith("_"):
                 continue
@@ -26,7 +28,10 @@ def main() -> Sequence[dict[str, Any]]:
                 continue
 
             try:
-                blocks.append(make_block(func))
+                # Use unique seed for each block to ensure reproducibility
+                block_seed = generation_seed + block_counter * 100 + round_num
+                blocks.append(make_block(func, seed=block_seed))
+                block_counter += 1
             except Exception as err:
                 # silenced: comment out the next line for verbose debugging
                 print(f"[warn] skipped {name}: {err}")

@@ -30,8 +30,12 @@ def dsl_functions_summary() -> str:
 DSL_FUNCTIONS_BLOCK = dsl_functions_summary()
 
 
-def make_block(func: Callable[..., Any], min_shots: int = 2, max_shots: int = 5) -> dict[str, Any]:
+def make_block(func: Callable[..., Any], min_shots: int = 2, max_shots: int = 5, seed: int = None) -> dict[str, Any]:
     """Generate a block of code for a DSL function."""
+    # Use seeded randomness for additional stability
+    if seed is not None:
+        random.seed(seed)
+    
     sig = inspect.signature(func)
 
     param_variants = {
@@ -49,6 +53,10 @@ def make_block(func: Callable[..., Any], min_shots: int = 2, max_shots: int = 5)
 
     shots = []
     for i in range(n_shots):
+        # Use consistent seed for each shot to ensure reproducibility
+        if seed is not None:
+            random.seed(seed + i * 1000)  # Offset seed for each shot
+            
         kwargs = {
             n: (gens[i] if i < len(gens) else random.choice(gens))()
             for n, gens in param_variants.items()
@@ -56,7 +64,9 @@ def make_block(func: Callable[..., Any], min_shots: int = 2, max_shots: int = 5)
         try:
             out = func(**kwargs)
         except Exception:
-            # retry with fresh random values
+            # retry with fresh random values but maintain seed consistency
+            if seed is not None:
+                random.seed(seed + i * 1000 + 500)  # Different offset for retry
             kwargs = {n: random.choice(g)() for n, g in param_variants.items()}
             out = func(**kwargs)
         shots.append({
