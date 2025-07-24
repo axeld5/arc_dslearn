@@ -95,7 +95,6 @@ if __name__ == "__main__":
     trainer = SFTTrainer(
         model=model,
         train_dataset=formatted_ds,
-        max_seq_length=MAX_LEN,
         dataset_num_proc=4,
         packing=False,  # Disable packing for better stability with complex data
         args=training_args,
