@@ -25,7 +25,7 @@ if __name__ == "__main__":
         max_seq_length=MAX_LEN,
         dtype=None,  # Auto-detect dtype
         load_in_4bit=True,  # Use 4-bit quantization for memory efficiency
-        device_map="balanced",
+        device_map="cuda",
     )
 
     # Configure LoRA using Unsloth
