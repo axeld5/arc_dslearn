@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import platform
 from collections import Counter
 from pathlib import Path
 from time import time
@@ -63,7 +62,7 @@ if __name__ == "__main__":
             # Enable 2x faster inference
             FastLanguageModel.for_inference(model)
             return model
-            
+
         elif name == "sft":
             # Load the SFT LoRA adapter
             model, _ = FastLanguageModel.from_pretrained(
@@ -76,7 +75,7 @@ if __name__ == "__main__":
             # Enable 2x faster inference
             FastLanguageModel.for_inference(model)
             return model
-            
+
         elif name == "rl":
             # Load the RL model (should be saved as a complete model)
             model, _ = FastLanguageModel.from_pretrained(
@@ -89,7 +88,7 @@ if __name__ == "__main__":
             # Enable 2x faster inference
             FastLanguageModel.for_inference(model)
             return model
-            
+
         raise ValueError(f"Unknown model name: {name}")
 
     models = {k: load_policy(k) for k in ("base", "sft", "rl")}
@@ -119,7 +118,7 @@ if __name__ == "__main__":
         load_in_4bit=True,
         device_map="balanced",
     )
-    
+
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 

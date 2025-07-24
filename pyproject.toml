@@ -10,6 +10,7 @@ dependencies = [
     "torch",
     "datasets",
     "transformers",
+    "tiktoken",
     "peft; sys_platform == 'linux'",
     "bitsandbytes; sys_platform == 'linux'",
     "accelerate; sys_platform == 'linux'",
@@ -63,7 +64,19 @@ testpaths  = ["tests"]
 python_version     = "3.11"
 strict             = true
 ignore_missing_imports = true
-exclude = ["^src/arc_dslearn/arc_dsl/"]
+exclude = [
+    "src/arc_dslearn/arc_dsl",
+    ".*arc_dsl.*"
+]
+
+[[tool.mypy.overrides]]
+module = [
+    "arc_dslearn.arc_dsl.*",
+    "*.arc_dsl.*"
+]
+ignore_errors = true
+ignore_missing_imports = true
+follow_imports = "skip"
 
 [[tool.mypy.overrides]]
 module = [

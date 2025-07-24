@@ -1,25 +1,27 @@
 """Utility functions for JSON handling."""
 
-from typing import Any
+from typing import Any, Iterable, Iterator
 
-from typing import Any, Iterable
 
-class OrderedFrozenSet(frozenset):
-    __slots__ = ('_order',)
+class OrderedFrozenSet(frozenset[Any]):
+    """A frozenset that preserves the order of its elements."""
 
-    def __new__(cls, iterable: Iterable[Any]):
+    def __new__(cls, iterable: Iterable[Any]) -> "OrderedFrozenSet":
+        """Create a new OrderedFrozenSet with the given iterable."""
         data = list(iterable)
         obj = super().__new__(cls, data)
-        obj._order = tuple(data)          # preserve insertion / JSON order
+        # Store order as a private attribute without using __slots__
+        object.__setattr__(obj, "_OrderedFrozenSet__order", tuple(data))
         return obj
 
-    def __iter__(self):
-        # iterate in the original order
-        return iter(self._order)
+    def __iter__(self) -> Iterator[Any]:
+        """Iterate in the original order."""
+        return iter(object.__getattribute__(self, "_OrderedFrozenSet__order"))
 
-    def __repr__(self):
-        # nice, stable repr that shows the preserved order
-        return f"OrderedFrozenSet({list(self._order)!r})"
+    def __repr__(self) -> str:
+        """Return a string representation that shows the preserved order."""
+        order = object.__getattribute__(self, "_OrderedFrozenSet__order")
+        return f"OrderedFrozenSet({list(order)!r})"
 
 
 def from_jsonable(x: Any) -> Any:

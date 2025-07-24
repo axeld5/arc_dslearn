@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import os
 from typing import Any, Dict
-import torch
 
-from unsloth import FastLanguageModel
+import torch
 from datasets import load_dataset
 from dotenv import load_dotenv
 from huggingface_hub import login
@@ -14,6 +13,7 @@ from trl import (
     GRPOConfig,
     GRPOTrainer,
 )
+from unsloth import FastLanguageModel
 
 from ..metrics_and_rewards.reward_fn import reward_function
 from ..utils import from_jsonable
@@ -25,7 +25,9 @@ if __name__ == "__main__":
     load_dotenv()
     login(os.getenv("HF_TOKEN"))
     BASE_MODEL = "Qwen/Qwen2.5-Coder-7B-Instruct"
-    LORA_PATH = "qwen2.5_7b_coder_dslearn_os_sft_unsloth/final"  # Updated path for Unsloth SFT model
+    LORA_PATH = (
+        "qwen2.5_7b_coder_dslearn_os_sft_unsloth/final"  # Updated path for Unsloth SFT model
+    )
     DATA_PATH = "train_split.json"
     MAX_LEN = 8192
 
@@ -45,8 +47,15 @@ if __name__ == "__main__":
     model = FastLanguageModel.get_peft_model(
         model,
         r=16,
-        target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
-                       "gate_proj", "up_proj", "down_proj"],
+        target_modules=[
+            "q_proj",
+            "k_proj",
+            "v_proj",
+            "o_proj",
+            "gate_proj",
+            "up_proj",
+            "down_proj",
+        ],
         lora_alpha=32,
         lora_dropout=0.05,
         bias="none",
@@ -60,6 +69,7 @@ if __name__ == "__main__":
     try:
         # Try to load the adapter weights from the SFT checkpoint
         import os
+
         if os.path.exists(LORA_PATH):
             print(f"Loading SFT adapter weights from {LORA_PATH}")
             # Load the saved adapter weights
@@ -136,9 +146,13 @@ if __name__ == "__main__":
     )
 
     trainer.train()
-    
+
     # Save the model
     trainer.save_model("qwen2.5_coder_dslearn_os_rl_unsloth/final")
-    
+
     # Optional: Save to hub
-    model.push_to_hub("axel-darmouni/qwen2.5-coder-arc-dslearn-rl", tokenizer=tokenizer, token=os.getenv("HF_TOKEN"))
+    model.push_to_hub(
+        "axel-darmouni/qwen2.5-coder-arc-dslearn-rl",
+        tokenizer=tokenizer,
+        token=os.getenv("HF_TOKEN"),
+    )

@@ -14,9 +14,8 @@ import src.arc_dslearn.arc_dsl.dsl as dsl
 from src.arc_dslearn.utils import from_jsonable
 
 
-from typing import Any
-
 def equality_key(x: Any) -> Any:
+    """Return a deterministic representation that ignores order for containers that are *logically* unordered."""
     if isinstance(x, (int, float, bool, str)) or x is None:
         return x
     if isinstance(x, (list, tuple)):
@@ -26,6 +25,7 @@ def equality_key(x: Any) -> Any:
     if isinstance(x, (set, frozenset)):
         return frozenset(equality_key(v) for v in x)
     return x
+
 
 def equivalent(a: Any, b: Any, shot_inputs: Dict[str, Any] | None = None) -> bool:
     """Return True if values should be considered equal using ARC-DSL."""
@@ -126,6 +126,7 @@ IMPORT_RE = re.compile(r"^\s*import\s+", re.M)
 
 class TimeoutError(Exception):
     """Custom timeout error for cross-platform compatibility."""
+
     pass
 
 
@@ -133,14 +134,14 @@ class TimeoutError(Exception):
 def time_limit(seconds: int) -> Generator[None, None, None]:
     """Cross-platform time limit for code execution using threading."""
     timeout_occurred = threading.Event()
-    
-    def timeout_handler():
+
+    def timeout_handler() -> None:
         timeout_occurred.set()
-    
+
     # Start the timer
     timer = threading.Timer(seconds, timeout_handler)
     timer.start()
-    
+
     try:
         yield
         # Check if timeout occurred during execution
@@ -196,10 +197,7 @@ def reward_function(
             bad_imports = bool(IMPORT_RE.search(code))
             names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
             unknown = (
-                names
-                - {"I", "O"}
-                - {f"x{i}" for i in range(1, 100)}
-                - set(dsl.__dict__.keys())
+                names - {"I", "O"} - {f"x{i}" for i in range(1, 100)} - set(dsl.__dict__.keys())
             )
             if not bad_imports and not unknown:
                 r += 0.1

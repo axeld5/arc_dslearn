@@ -3,19 +3,18 @@
 import os
 from typing import Any, Dict
 
-from unsloth import FastLanguageModel
 from datasets import load_dataset
 from dotenv import load_dotenv
 from huggingface_hub import login
-from trl import SFTTrainer
 from transformers import TrainingArguments
-
+from trl import SFTTrainer
+from unsloth import FastLanguageModel
 
 if __name__ == "__main__":
     MODEL_NAME = "Qwen/Qwen2.5-Coder-7B-Instruct"
     DATA_FILE = "train_split.json"
     MAX_LEN = 8192
-    
+
     load_dotenv()
     login(os.getenv("HF_TOKEN"))
 
@@ -25,15 +24,22 @@ if __name__ == "__main__":
         max_seq_length=MAX_LEN,
         dtype=None,  # Auto-detect dtype
         load_in_4bit=True,  # Use 4-bit quantization for memory efficiency
-        device_map = "balanced",
+        device_map="balanced",
     )
 
     # Configure LoRA using Unsloth
     model = FastLanguageModel.get_peft_model(
         model,
         r=16,
-        target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
-                       "gate_proj", "up_proj", "down_proj"],
+        target_modules=[
+            "q_proj",
+            "k_proj",
+            "v_proj",
+            "o_proj",
+            "gate_proj",
+            "up_proj",
+            "down_proj",
+        ],
         lora_alpha=32,
         lora_dropout=0.05,
         bias="none",
@@ -53,13 +59,9 @@ if __name__ == "__main__":
             {"role": "user", "content": example["user_prompt"]},
             {"role": "assistant", "content": example["assistant_prompt"]},
         ]
-        
+
         # Use Unsloth's chat template formatting
-        text = tokenizer.apply_chat_template(
-            messages, 
-            tokenize=False, 
-            add_generation_prompt=False
-        )
+        text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
         return {"text": text}
 
     # Format the dataset
@@ -85,7 +87,7 @@ if __name__ == "__main__":
         push_to_hub=True,
         seed=3407,
         optim="adamw_8bit",  # Memory efficient optimizer
-        ddp_find_unused_parameters = False,
+        ddp_find_unused_parameters=False,
     )
 
     # Use Unsloth's optimized SFT trainer
@@ -105,9 +107,13 @@ if __name__ == "__main__":
 
     # Train the model
     trainer.train()
-    
+
     # Save the model
     trainer.save_model("qwen2.5_coder_dslearn_os_sft_unsloth/final")
-    
+
     # Optional: Save to hub
-    model.push_to_hub("axel-darmouni/qwen2.5-coder-arc-dslearn-sft", tokenizer=tokenizer, token=os.getenv("HF_TOKEN"))
+    model.push_to_hub(
+        "axel-darmouni/qwen2.5-coder-arc-dslearn-sft",
+        tokenizer=tokenizer,
+        token=os.getenv("HF_TOKEN"),
+    )

@@ -76,6 +76,7 @@ def reward_fn_debug(
                 input_data = shot["inputs"]
                 if isinstance(input_data, str):
                     import json
+
                     input_data = json.loads(input_data)
 
                 # Execute with input data context

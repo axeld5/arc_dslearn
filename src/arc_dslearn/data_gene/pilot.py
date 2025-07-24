@@ -17,7 +17,7 @@ def main(generation_seed: int = 42) -> Sequence[dict[str, Any]]:
     """Generate blocks of code for DSL functions."""
     blocks = []
     block_counter = 0
-    
+
     for round_num in range(20):
         for name, func in inspect.getmembers(dsl, inspect.isfunction):
             if name.startswith("_"):

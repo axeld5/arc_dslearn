@@ -1,4 +1,7 @@
+"""Count the number of tokens in the system and user prompts of the train split."""
+
 import json
+
 import tiktoken
 
 if __name__ == "__main__":
@@ -16,6 +19,6 @@ if __name__ == "__main__":
         token_counts.append(len(tokens))
         print(f"Sample {i}: {len(tokens)} tokens")
 
-    print(f"Average tokens: {sum(token_counts)/len(token_counts):.2f}")
+    print(f"Average tokens: {sum(token_counts) / len(token_counts):.2f}")
     print(f"Max tokens: {max(token_counts)}")
     print(f"Min tokens: {min(token_counts)}")
