@@ -3,6 +3,10 @@
 import os
 from typing import Any, Dict
 
+import sys
+import trl
+import inspect
+
 from unsloth import FastLanguageModel
 from datasets import load_dataset
 from dotenv import load_dotenv
@@ -11,6 +15,11 @@ from transformers import TrainingArguments
 from trl import SFTTrainer
 
 if __name__ == "__main__":
+    print("python  :", sys.executable)
+    print("trl file:", trl.__file__)
+    print("trl ver :", trl.__version__)
+    print("SFT sig :", inspect.signature(trl.SFTTrainer.__init__))
+
     MODEL_NAME = "Qwen/Qwen2.5-Coder-7B-Instruct"
     DATA_FILE = "train_split.json"
     MAX_LEN = 8192
