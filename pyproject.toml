@@ -51,6 +51,7 @@ extend-select   = ["B", "C4", "D", "I", "SIM"]     # flake-bugs, comprehension, 
 "src/arc_dslearn/arc_dsl/arc_types.py" = ["F401"]
 "src/arc_dslearn/arc_dsl/dsl.py" = ["C417", "SIM102", "C408", "C401", "C400", "D401", "D400", "D415", "F405", "F403", "E741", "D103", "D100", "I001", "F841"]  # Allow star imports and auto-generated code patterns for DSL solvers
 "src/arc_dslearn/arc_dsl/solvers.py" = ["F405", "F403", "E741", "D103", "D100", "I001", "F841"]  # Allow star imports and auto-generated code patterns for DSL solvers
+"src/arc_dslearn/model_tuning/finetuning_script.py" = ["I001"]  # Allow flexible import ordering
 
 [tool.ruff.format]
 docstring-code-format = true

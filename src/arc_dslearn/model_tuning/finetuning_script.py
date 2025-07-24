@@ -3,12 +3,12 @@
 import os
 from typing import Any, Dict
 
+from unsloth import FastLanguageModel
 from datasets import load_dataset
 from dotenv import load_dotenv
 from huggingface_hub import login
 from transformers import TrainingArguments
 from trl import SFTTrainer
-from unsloth import FastLanguageModel
 
 if __name__ == "__main__":
     MODEL_NAME = "Qwen/Qwen2.5-Coder-7B-Instruct"
