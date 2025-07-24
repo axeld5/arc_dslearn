@@ -23,9 +23,7 @@ if __name__ == "__main__":
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name=MODEL_NAME,
         max_seq_length=MAX_LEN,
-        dtype=None,  # Auto-detect dtype
         load_in_4bit=True,  # Use 4-bit quantization for memory efficiency
-        device_map="cuda",
     )
 
     # Configure LoRA using Unsloth
