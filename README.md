@@ -96,7 +96,7 @@ All scripts should be executed using `uv run` to ensure proper environment and d
 
 2. **SFT Training**: 
    ```bash
-   uv run python src/arc_dslearn/model_tuning/finetuning_script.py
+   uv run torchrun --nproc_per_node <n_gpus> --standalone src/arc_dslearn/model_tuning/finetuning_script.py
    ```
 
 3. **RL Training**: 
