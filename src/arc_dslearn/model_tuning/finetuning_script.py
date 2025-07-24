@@ -3,23 +3,15 @@
 import os
 from typing import Any, Dict
 
-import sys
-import trl
-import inspect
 
-from unsloth import FastLanguageModel
 from datasets import load_dataset
 from dotenv import load_dotenv
 from huggingface_hub import login
 from transformers import TrainingArguments
 from trl import SFTTrainer
+from unsloth import FastLanguageModel
 
 if __name__ == "__main__":
-    print("python  :", sys.executable)
-    print("trl file:", trl.__file__)
-    print("trl ver :", trl.__version__)
-    print("SFT sig :", inspect.signature(trl.SFTTrainer.__init__))
-
     MODEL_NAME = "Qwen/Qwen2.5-Coder-7B-Instruct"
     DATA_FILE = "train_split.json"
     MAX_LEN = 8192
@@ -102,7 +94,6 @@ if __name__ == "__main__":
     # Use Unsloth's optimized SFT trainer
     trainer = SFTTrainer(
         model=model,
-        tokenizer=tokenizer,
         train_dataset=formatted_ds,
         dataset_text_field="text",  # Column containing the formatted text
         max_seq_length=MAX_LEN,
