@@ -1,6 +1,8 @@
 """Finetuning script using Unsloth for faster training."""
 
 import os
+
+os.environ["UNSLOTH_RETURN_LOGITS"] = "1"
 from typing import Any, Dict
 
 
@@ -94,7 +96,6 @@ if __name__ == "__main__":
         model=model,
         train_dataset=formatted_ds,
         args=training_args,
-        formatting_func=format_chat_template,
     )
 
     # Enable faster training with Unsloth
