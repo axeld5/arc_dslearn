@@ -11,11 +11,11 @@ from typing import Any, Tuple
 def to_jsonable(x: Any) -> Any:
     """Convert a value to a JSON-able format."""
     if isinstance(x, frozenset):
-        return {"__frozenset__": [to_jsonable(v) for v in sorted(x)]}
+        return {"__frozenset__": [to_jsonable(v) for v in x]}
     if isinstance(x, tuple):
         return {"__tuple__": [to_jsonable(v) for v in x]}
     if isinstance(x, set):
-        return {"__set__": [to_jsonable(v) for v in sorted(x)]}
+        return {"__set__": [to_jsonable(v) for v in x]}
     if isinstance(x, dict):
         return {k: to_jsonable(v) for k, v in x.items()}
     if isinstance(x, (list, int, float, str, bool)) or x is None:
