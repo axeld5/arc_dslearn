@@ -42,17 +42,17 @@ echo "✓ Training data generated successfully"
 
 # Step 4: Run fine-tuning
 echo "Step 4: Starting fine-tuning with $N_GPUS GPUs..."
-uv run torchrun --nproc_per_node $N_GPUS -m arc_dslearn/model_tuning/finetuning_script
+uv run torchrun --nproc_per_node $N_GPUS -m arc_dslearn.model_tuning.finetuning_script
 echo "✓ Fine-tuning completed successfully"
 
 # Step 5: Run RL training
 echo "Step 5: Starting RL training with $N_GPUS GPUs..."
-uv run torchrun --nproc_per_node $N_GPUS -m arc_dslearn/model_tuning/rl_script
+uv run torchrun --nproc_per_node $N_GPUS -m arc_dslearn.model_tuning.rl_script
 echo "✓ RL training completed successfully"
 
 # Step 6: Run evaluation
 echo "Step 6: Starting evaluation with $N_GPUS GPUs..."
-uv run python -m arc_dslearn/model_eval/evaluate_main
+uv run python -m arc_dslearn.model_eval.evaluate_main
 echo "✓ Evaluation completed successfully"
 
 echo "=================================================="
