@@ -55,9 +55,9 @@ if __name__ == "__main__":
 
     # Step 3: Preprocess for dataset loading
     print("\nStep 3: Preprocessing for dataset loading...")
-    prepare_datasets_for_loading()
     remove_long_token_samples("train_split.json", "train_split.json")
     remove_long_token_samples("eval_split.json", "eval_split.json")
+    prepare_datasets_for_loading()
 
     print("\n✓ Pipeline complete! Ready to use:")
     print(f"  - train_set.json ({len(training_blocks)} examples)")
