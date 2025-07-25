@@ -8,6 +8,7 @@ from typing import Any, Dict
 import unsloth
 import torch
 
+from accelerate.hooks import remove_hook_from_module
 from datasets import load_dataset
 from dotenv import load_dotenv
 from huggingface_hub import login
@@ -72,6 +73,12 @@ if __name__ == "__main__":
 
     # Enable faster training with Unsloth
     FastLanguageModel.for_training(model)
+
+    if getattr(model, "_hf_hook", None) is not None:
+        remove_hook_from_module(model)
+        model._hf_hook = None
+    if hasattr(model, "hf_device_map"):
+        delattr(model, "hf_device_map")
 
     # Training arguments
     training_args = TrainingArguments(
