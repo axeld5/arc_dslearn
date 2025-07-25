@@ -40,7 +40,7 @@ if __name__ == "__main__":
         max_seq_length=MAX_LEN,
         dtype=None,
         load_in_4bit=True,
-        device_map={"": torch.cuda.current_device()},
+        device_map="balanced",
     )
 
     if tokenizer.pad_token is None:
