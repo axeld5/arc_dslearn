@@ -6,6 +6,7 @@ import os
 from typing import Any, Dict
 
 import unsloth
+import torch
 
 from datasets import load_dataset
 from dotenv import load_dotenv
@@ -39,7 +40,7 @@ if __name__ == "__main__":
         max_seq_length=MAX_LEN,
         dtype=None,
         load_in_4bit=True,
-        device_map="balanced",
+        device_map={"": torch.cuda.current_device()},
     )
 
     if tokenizer.pad_token is None:

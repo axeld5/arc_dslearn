@@ -6,6 +6,7 @@ os.environ["UNSLOTH_RETURN_LOGITS"] = "1"
 from typing import Any, Dict
 
 import unsloth
+import torch
 
 from datasets import load_dataset
 from dotenv import load_dotenv
@@ -27,6 +28,7 @@ if __name__ == "__main__":
         model_name=MODEL_NAME,
         max_seq_length=MAX_LEN,
         load_in_4bit=True,  # Use 4-bit quantization for memory efficiency
+        device_map={"": torch.cuda.current_device()},
     )
 
     # Configure LoRA using Unsloth
