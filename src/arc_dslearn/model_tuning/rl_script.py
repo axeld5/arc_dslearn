@@ -26,7 +26,7 @@ if __name__ == "__main__":
     LORA_PATH = "/home/user/arc_dslearn/qwen2.5_coder_dslearn_os_sft_unsloth/"
 
     DATA_PATH = "train_split.json"
-    MAX_LEN = 16384
+    MAX_LEN = 8192
 
     # ---------------------------------------------------------------------
     # 1. Load model and tokenizer with Unsloth optimizations
