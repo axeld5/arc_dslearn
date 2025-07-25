@@ -5,6 +5,10 @@ from __future__ import annotations
 import os
 from typing import Any, Dict
 
+import unsloth
+
+unsloth.set_verbosity(1)
+
 from datasets import load_dataset
 from dotenv import load_dotenv
 from huggingface_hub import login

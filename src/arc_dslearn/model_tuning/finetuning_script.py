@@ -5,6 +5,9 @@ import os
 os.environ["UNSLOTH_RETURN_LOGITS"] = "1"
 from typing import Any, Dict
 
+import unsloth
+
+unsloth.set_verbosity(1)
 
 from datasets import load_dataset
 from dotenv import load_dotenv
