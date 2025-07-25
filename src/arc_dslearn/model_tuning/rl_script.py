@@ -5,10 +5,10 @@ from __future__ import annotations
 import os
 from typing import Any, Dict
 
-import torch
 from datasets import load_dataset
 from dotenv import load_dotenv
 from huggingface_hub import login
+from peft import PeftModel
 from trl import (
     GRPOConfig,
     GRPOTrainer,
@@ -38,45 +38,14 @@ if __name__ == "__main__":
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name=BASE_MODEL,
         max_seq_length=MAX_LEN,
-        dtype=None,  # Auto-detect dtype
-        load_in_4bit=True,  # Use 4-bit quantization for memory efficiency
+        dtype=None,
+        load_in_4bit=True,
         device_map="balanced",
     )
 
-    # Configure LoRA using Unsloth (for RL fine-tuning)
-    model = FastLanguageModel.get_peft_model(
-        model,
-        r=16,
-        target_modules=[
-            "q_proj",
-            "k_proj",
-            "v_proj",
-            "o_proj",
-            "gate_proj",
-            "up_proj",
-            "down_proj",
-        ],
-        lora_alpha=32,
-        lora_dropout=0.05,
-        bias="none",
-        use_gradient_checkpointing="unsloth",  # Unsloth optimization
-        random_state=3407,
-        use_rslora=False,
-        loftq_config=None,
-    )
-
-    # Load weights from the SFT checkpoint if it exists
-    try:
-        # Try to load the adapter weights from the SFT checkpoint
-        import os
-
-        if os.path.exists(LORA_PATH):
-            print(f"Loading SFT adapter weights from {LORA_PATH}")
-            # Load the saved adapter weights
-            model.load_state_dict(torch.load(f"{LORA_PATH}/adapter_model.bin"), strict=False)
-    except Exception as e:
-        print(f"Could not load SFT weights from {LORA_PATH}: {e}")
-        print("Starting RL training from base model...")
+    # 2) Attach the *SFT* LoRA directly
+    #    (this reads adapter_config.json + adapter_model.bin from LORA_PATH)
+    model = PeftModel.from_pretrained(model, LORA_PATH, is_trainable=True)
 
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
