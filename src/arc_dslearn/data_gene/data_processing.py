@@ -35,20 +35,18 @@ def compact_format(x: Any) -> str:
 
 
 def to_jsonable(x: Any) -> Any:
-    """Convert a value to a JSON-able format with compact representation."""
+    """Convert a value to a JSON-able format."""
     if isinstance(x, frozenset):
-        # Compact: just convert to list without metadata wrapper
-        return [to_jsonable(v) for v in x]
+        return {"__frozenset__": [to_jsonable(v) for v in x]}
     if isinstance(x, tuple):
-        # Compact: just convert to list without metadata wrapper
-        return [to_jsonable(v) for v in x]
+        return {"__tuple__": [to_jsonable(v) for v in x]}
     if isinstance(x, set):
-        return [to_jsonable(v) for v in x]
+        return {"__set__": [to_jsonable(v) for v in x]}
     if isinstance(x, dict):
         return {k: to_jsonable(v) for k, v in x.items()}
     if isinstance(x, (list, int, float, str, bool)) or x is None:
         return x
-    return str(x)  # Compact: direct string conversion
+    return {"__str__": str(x)}  # last resort
 
 
 def preprocess_json_file(input_file: str, output_file: str) -> None:

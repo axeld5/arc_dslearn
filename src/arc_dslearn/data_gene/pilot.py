@@ -24,8 +24,9 @@ def main(generation_seed: int = 42) -> Sequence[dict[str, Any]]:
             if name.startswith("_"):
                 continue
 
-            if should_skip_function(func) and round_num == 0:
-                print(f"[info] skipped {name}: has callable parameter or returns callable")
+            if should_skip_function(func):
+                if round_num == 0:
+                    print(f"[info] skipped {name}: has callable parameter or returns callable")
                 continue
 
             try:
