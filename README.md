@@ -106,7 +106,7 @@ All scripts should be executed using `uv run` to ensure proper environment and d
 
 4. **Model Evaluation**: 
    ```bash
-   uv run python src/arc_dslearn/model_eval/evaluate_models.py
+   uv run python src/arc_dslearn/model_eval/evaluate_main.py
    ```
 
 5. **Run Tests**: 
