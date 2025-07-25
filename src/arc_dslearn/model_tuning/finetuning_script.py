@@ -16,7 +16,7 @@ from unsloth import FastLanguageModel
 if __name__ == "__main__":
     MODEL_NAME = "Qwen/Qwen2.5-Coder-7B-Instruct"
     DATA_FILE = "train_split.json"
-    MAX_LEN = 8192
+    MAX_LEN = 16384
 
     load_dotenv()
     login(os.getenv("HF_TOKEN"))

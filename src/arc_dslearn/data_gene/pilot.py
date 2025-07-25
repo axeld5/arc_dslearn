@@ -10,6 +10,7 @@ from typing import Any, Sequence
 import src.arc_dslearn.arc_dsl.dsl as dsl
 
 from .block_generation import make_block, should_skip_function
+from .cleanup import remove_long_token_samples
 from .data_processing import create_train_eval_split, prepare_datasets_for_loading
 
 
@@ -18,12 +19,12 @@ def main(generation_seed: int = 42) -> Sequence[dict[str, Any]]:
     blocks = []
     block_counter = 0
 
-    for round_num in range(20):
+    for round_num in range(100):
         for name, func in inspect.getmembers(dsl, inspect.isfunction):
             if name.startswith("_"):
                 continue
 
-            if should_skip_function(func):
+            if should_skip_function(func) and round_num == 0:
                 print(f"[info] skipped {name}: has callable parameter or returns callable")
                 continue
 
@@ -54,6 +55,8 @@ if __name__ == "__main__":
     # Step 3: Preprocess for dataset loading
     print("\nStep 3: Preprocessing for dataset loading...")
     prepare_datasets_for_loading()
+    remove_long_token_samples("train_split.json", "train_split.json")
+    remove_long_token_samples("eval_split.json", "eval_split.json")
 
     print("\n✓ Pipeline complete! Ready to use:")
     print(f"  - train_set.json ({len(training_blocks)} examples)")
