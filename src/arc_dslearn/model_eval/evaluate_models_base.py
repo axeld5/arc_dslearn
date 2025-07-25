@@ -10,8 +10,6 @@ from typing import Any, Dict, Tuple
 
 import unsloth
 
-unsloth.set_verbosity(1)
-
 import matplotlib.pyplot as plt
 import pandas as pd
 import torch
