@@ -28,7 +28,7 @@ if __name__ == "__main__":
         model_name=MODEL_NAME,
         max_seq_length=MAX_LEN,
         load_in_4bit=True,  # Use 4-bit quantization for memory efficiency
-        device_map={"": torch.cuda.current_device()},
+        device_map="balanced",
     )
 
     # Configure LoRA using Unsloth
