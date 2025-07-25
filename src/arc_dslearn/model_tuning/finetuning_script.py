@@ -77,8 +77,6 @@ if __name__ == "__main__":
     if getattr(model, "_hf_hook", None) is not None:
         remove_hook_from_module(model)
         model._hf_hook = None
-    if hasattr(model, "hf_device_map"):
-        delattr(model, "hf_device_map")
 
     # Training arguments
     training_args = TrainingArguments(
