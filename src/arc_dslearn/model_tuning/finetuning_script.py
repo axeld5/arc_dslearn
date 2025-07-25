@@ -71,6 +71,9 @@ if __name__ == "__main__":
     # Format the dataset
     formatted_ds = raw_ds.map(format_chat_template, remove_columns=raw_ds.column_names)
 
+    # Enable faster training with Unsloth
+    FastLanguageModel.for_training(model)
+
     # Training arguments
     training_args = TrainingArguments(
         output_dir="qwen2.5_coder_dslearn_os_sft_unsloth",
@@ -100,9 +103,6 @@ if __name__ == "__main__":
         train_dataset=formatted_ds,
         args=training_args,
     )
-
-    # Enable faster training with Unsloth
-    FastLanguageModel.for_training(model)
 
     # Train the model
     trainer.train()
