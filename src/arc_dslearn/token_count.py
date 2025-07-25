@@ -13,14 +13,15 @@ if __name__ == "__main__":
     enc = tiktoken.encoding_for_model("gpt-3.5-turbo")  # or use a different model if needed
 
     token_counts = []
-    for i, sample in enumerate(data):
+    cnt = 0
+    for sample in data:
         full_prompt = sample.get("system_prompt", "") + sample.get("user_prompt", "")
         tokens = enc.encode(full_prompt)
         token_counts.append(len(tokens))
-        if len(tokens) > 5000:
-            print(f"Sample {i}: {len(tokens)} tokens")
-            print(full_prompt)
+        if len(tokens) > 8000:
+            cnt += 1
 
+    print(f"Number of samples with >8000 tokens: {cnt}")
     print(f"Average tokens: {sum(token_counts) / len(token_counts):.2f}")
     print(f"Max tokens: {max(token_counts)}")
     print(f"Min tokens: {min(token_counts)}")

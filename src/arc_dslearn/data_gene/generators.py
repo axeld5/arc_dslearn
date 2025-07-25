@@ -26,7 +26,7 @@ def rand_color() -> int:
     return random.randint(0, 9)
 
 
-def rand_grid(max_side: int = 20) -> T.Grid:
+def rand_grid(max_side: int = 30) -> T.Grid:
     """Generate a random grid."""
     h, w = random.randint(1, max_side), random.randint(1, max_side)
     return tuple(tuple(rand_color() for _ in range(w)) for _ in range(h))  # type: ignore[return-value]
