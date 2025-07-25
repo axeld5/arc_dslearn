@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Any, Dict
 
 from datasets import load_dataset
@@ -25,9 +26,10 @@ if __name__ == "__main__":
     load_dotenv()
     login(os.getenv("HF_TOKEN"))
     BASE_MODEL = "Qwen/Qwen2.5-Coder-7B-Instruct"
-    LORA_PATH = (
-        "qwen2.5_7b_coder_dslearn_os_sft_unsloth/final"  # Updated path for Unsloth SFT model
-    )
+    LORA_PATH = Path(__file__).resolve().parent / "qwen2.5_7b_coder_dslearn_os_sft_unsloth/final"
+    cfg_file = LORA_PATH / "adapter_config.json"
+    assert cfg_file.exists(), f"Missing {cfg_file}! Did you save the adapter with save_pretrained?"
+
     DATA_PATH = "train_split.json"
     MAX_LEN = 8192
 
