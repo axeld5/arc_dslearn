@@ -33,7 +33,7 @@ if __name__ == "__main__":
     # 1. Load model and tokenizer with Unsloth optimizations
     # ---------------------------------------------------------------------
     # First load the base model with Unsloth
-    model, tokenizer = FastLanguageModel.get_peft_model(
+    model, tokenizer = FastLanguageModel.from_pretrained(
         model_name=LORA_PATH,
         max_seq_length=MAX_LEN,
         dtype=None,
