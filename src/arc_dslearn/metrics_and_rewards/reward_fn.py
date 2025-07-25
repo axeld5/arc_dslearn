@@ -6,7 +6,7 @@ import contextlib
 import inspect
 import json
 import re
-import signal
+import threading
 import types
 from typing import Any, Callable, Dict, Generator, List
 
@@ -14,36 +14,22 @@ import src.arc_dslearn.arc_dsl.dsl as dsl
 from src.arc_dslearn.utils import from_jsonable
 
 
-def canonical(x: Any) -> Any:
+def equality_key(x: Any) -> Any:
     """Return a deterministic representation that ignores order for containers that are *logically* unordered."""
     if isinstance(x, (int, float, bool, str)) or x is None:
         return x
-
-    if isinstance(x, (set, frozenset)):
-        return frozenset(canonical(v) for v in sorted(x, key=repr))
-
-    if isinstance(x, tuple):
-        # Are the elements *all* simple scalars?  Then order matters
-        # (e.g. a grid row).  Otherwise we sort.
-        if all(isinstance(v, (int, float, bool, str)) for v in x):
-            return tuple(canonical(v) for v in x)
-        return tuple(sorted((canonical(v) for v in x), key=repr))
-
-    if isinstance(x, list):
-        return tuple(canonical(v) for v in x)
-
+    if isinstance(x, (list, tuple)):
+        return tuple(equality_key(v) for v in x)
     if isinstance(x, dict):
-        return tuple(sorted((k, canonical(v)) for k, v in x.items()))
-
-    if all(isinstance(v, int) for v in x):  # NEW – scalar tuple
-        return tuple(sorted(x))  # NEW – deterministic
-
+        return tuple((k, equality_key(v)) for k, v in x.items())
+    if isinstance(x, (set, frozenset)):
+        return frozenset(equality_key(v) for v in x)
     return x
 
 
 def equivalent(a: Any, b: Any, shot_inputs: Dict[str, Any] | None = None) -> bool:
     """Return True if values should be considered equal using ARC-DSL."""
-    if canonical(a) == canonical(b):
+    if equality_key(a) == equality_key(b):
         return True
 
     # special-case: colour ties ------------------------------------------
@@ -138,19 +124,32 @@ SOLVE_RE = re.compile(r"\bdef\s+solve\s*\(\s*I\s*\)\s*:")
 IMPORT_RE = re.compile(r"^\s*import\s+", re.M)
 
 
+class TimeoutError(Exception):
+    """Custom timeout error for cross-platform compatibility."""
+
+    pass
+
+
 @contextlib.contextmanager
 def time_limit(seconds: int) -> Generator[None, None, None]:
-    """Set a time limit for the code execution."""
+    """Cross-platform time limit for code execution using threading."""
+    timeout_occurred = threading.Event()
 
-    def handler(signum: int, frame: Any) -> None:
-        raise TimeoutError()
+    def timeout_handler() -> None:
+        timeout_occurred.set()
 
-    signal.signal(signal.SIGALRM, handler)
-    signal.alarm(seconds)
+    # Start the timer
+    timer = threading.Timer(seconds, timeout_handler)
+    timer.start()
+
     try:
         yield
+        # Check if timeout occurred during execution
+        if timeout_occurred.is_set():
+            raise TimeoutError("Code execution timed out")
     finally:
-        signal.alarm(0)
+        # Always cancel the timer to prevent it from firing later
+        timer.cancel()
 
 
 def safe_exec(code: str, input_data: Any = None) -> types.ModuleType:
@@ -177,7 +176,7 @@ def safe_exec(code: str, input_data: Any = None) -> types.ModuleType:
     return mod
 
 
-def reward_fn(
+def reward_function(
     completions: List[str], shots: List[List[Dict[str, Any]]], **kwargs: Any
 ) -> List[float]:
     """Reward = 0.1 (format) + 0.1 (DSL only) + 0.8 (all shots pass)."""
@@ -198,10 +197,7 @@ def reward_fn(
             bad_imports = bool(IMPORT_RE.search(code))
             names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
             unknown = (
-                names
-                - {"I", "O"}
-                - {f"x{i}" for i in range(1, 100)}
-                - set(__import__("arc_dsl.dsl").dsl.__dict__.keys())
+                names - {"I", "O"} - {f"x{i}" for i in range(1, 100)} - set(dsl.__dict__.keys())
             )
             if not bad_imports and not unknown:
                 r += 0.1

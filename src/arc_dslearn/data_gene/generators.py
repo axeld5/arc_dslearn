@@ -211,6 +211,8 @@ def variant_generators(name: str, anno: Any, func_name: str = "") -> list[Callab
                 lambda: (rand_container(2), rand_container(2), rand_grid()),
                 lambda: frozenset([rand_object(), rand_indices(), rand_grid()]),
             ]
+        elif func_name in ["first", "last", "color", "colorfilter", "totuple", "other"]:
+            return [rand_container]
         return [rand_container, rand_object, rand_indices, rand_int_frozenset]
 
     if anno is Any:  # ③
