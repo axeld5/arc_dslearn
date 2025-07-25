@@ -9,7 +9,6 @@ from typing import Any, Dict
 from datasets import load_dataset
 from dotenv import load_dotenv
 from huggingface_hub import login
-from peft import PeftModel
 from trl import (
     GRPOConfig,
     GRPOTrainer,
@@ -25,10 +24,7 @@ from ..utils import from_jsonable
 if __name__ == "__main__":
     load_dotenv()
     login(os.getenv("HF_TOKEN"))
-    BASE_MODEL = "Qwen/Qwen2.5-Coder-7B-Instruct"
-    LORA_PATH = Path("/home/user/arc_dslearn/qwen2.5_coder_dslearn_os_sft_unsloth/final")
-    cfg_file = LORA_PATH / "adapter_config.json"
-    assert cfg_file.exists(), f"Missing {cfg_file}! Did you save the adapter with save_pretrained?"
+    LORA_PATH = Path("/home/user/arc_dslearn/qwen2.5_coder_dslearn_os_sft_unsloth/")
 
     DATA_PATH = "train_split.json"
     MAX_LEN = 8192
@@ -37,17 +33,13 @@ if __name__ == "__main__":
     # 1. Load model and tokenizer with Unsloth optimizations
     # ---------------------------------------------------------------------
     # First load the base model with Unsloth
-    model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name=BASE_MODEL,
+    model, tokenizer = FastLanguageModel.get_peft_model(
+        model_name=LORA_PATH,
         max_seq_length=MAX_LEN,
         dtype=None,
         load_in_4bit=True,
         device_map="balanced",
     )
-
-    # 2) Attach the *SFT* LoRA directly
-    #    (this reads adapter_config.json + adapter_model.bin from LORA_PATH)
-    model = PeftModel.from_pretrained(model, LORA_PATH, is_trainable=True)
 
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
