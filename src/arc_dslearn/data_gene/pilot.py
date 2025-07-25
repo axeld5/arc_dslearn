@@ -11,7 +11,7 @@ import src.arc_dslearn.arc_dsl.dsl as dsl
 
 from .block_generation import make_block, should_skip_function
 from .cleanup import remove_long_token_samples
-from .data_processing import create_train_eval_split, prepare_datasets_for_loading
+from .data_processing import create_train_eval_split
 
 
 def main(generation_seed: int = 42) -> Sequence[dict[str, Any]]:
@@ -57,7 +57,6 @@ if __name__ == "__main__":
     print("\nStep 3: Preprocessing for dataset loading...")
     remove_long_token_samples("train_split.json", "train_split.json")
     remove_long_token_samples("eval_split.json", "eval_split.json")
-    prepare_datasets_for_loading()
 
     print("\n✓ Pipeline complete! Ready to use:")
     print(f"  - train_set.json ({len(training_blocks)} examples)")
