@@ -35,7 +35,7 @@ def evaluate_finetuned_models() -> Dict[str, float]:
     MAX_SEQ_LENGTH = 8192
 
     SHOW_SAMPLES = True
-    SAMPLE_EVERY = 20
+    SAMPLE_EVERY = 50
 
     # ------------------------------------------------------------------ models
     def build_prompt(sample: Dict[str, Any], tokenizer: Any) -> str:
