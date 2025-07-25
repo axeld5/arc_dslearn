@@ -53,9 +53,11 @@ def preprocess_json_file(input_file: str, output_file: str) -> None:
     """Prepare data for dataset loading without double JSON encoding."""
     with open(input_file, "r") as f:
         data = json.load(f)
-
-    # Keep inputs and outputs as objects - no need to stringify them
-    # The double JSON encoding was causing massive token bloat
+    for record in data:
+        if record["shots"]:
+            for shot in record["shots"]:
+                shot["inputs"] = json.dumps(shot["inputs"])
+                shot["output"] = json.dumps(shot["output"])
     with open(output_file, "w") as f:
         json.dump(data, f, indent=2)
 
