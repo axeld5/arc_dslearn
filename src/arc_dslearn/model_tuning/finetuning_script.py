@@ -28,7 +28,6 @@ if __name__ == "__main__":
         model_name=MODEL_NAME,
         max_seq_length=MAX_LEN,
         load_in_4bit=True,  # Use 4-bit quantization for memory efficiency
-        device_map="balanced",  # Let Unsloth handle device mapping automatically
     )
 
     # Configure LoRA using Unsloth
