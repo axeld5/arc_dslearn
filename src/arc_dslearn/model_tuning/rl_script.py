@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 from typing import Any, Dict
 
 from datasets import load_dataset
@@ -24,7 +23,7 @@ from ..utils import from_jsonable
 if __name__ == "__main__":
     load_dotenv()
     login(os.getenv("HF_TOKEN"))
-    LORA_PATH = Path("/home/user/arc_dslearn/qwen2.5_coder_dslearn_os_sft_unsloth/")
+    LORA_PATH = "/home/user/arc_dslearn/qwen2.5_coder_dslearn_os_sft_unsloth/"
 
     DATA_PATH = "train_split.json"
     MAX_LEN = 8192
