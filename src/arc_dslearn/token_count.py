@@ -17,7 +17,9 @@ if __name__ == "__main__":
         full_prompt = sample.get("system_prompt", "") + sample.get("user_prompt", "")
         tokens = enc.encode(full_prompt)
         token_counts.append(len(tokens))
-        print(f"Sample {i}: {len(tokens)} tokens")
+        if len(tokens) > 5000:
+            print(f"Sample {i}: {len(tokens)} tokens")
+            print(full_prompt)
 
     print(f"Average tokens: {sum(token_counts) / len(token_counts):.2f}")
     print(f"Max tokens: {max(token_counts)}")

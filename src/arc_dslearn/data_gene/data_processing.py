@@ -8,33 +8,56 @@ from pathlib import Path
 from typing import Any, Tuple
 
 
+def compact_format(x: Any) -> str:
+    """Create ultra-compact string representation to minimize tokens."""
+    if isinstance(x, (list, tuple)) and len(x) > 0:
+        # Check if it's a grid (nested lists/tuples of integers)
+        if isinstance(x[0], (list, tuple)) and all(isinstance(row, (list, tuple)) for row in x):
+            # Grid format: use semicolon for rows, comma for columns
+            return ";".join(",".join(map(str, row)) for row in x)
+        # Regular list/tuple: compact comma-separated
+        elif all(isinstance(item, int) for item in x):
+            return ",".join(map(str, x))
+        else:
+            # Mixed types - use minimal brackets
+            return "[" + ",".join(compact_format(item) for item in x) + "]"
+    elif isinstance(x, (frozenset, set)):
+        items = list(x)
+        return "{" + ",".join(compact_format(item) for item in items) + "}"
+    elif isinstance(x, dict):
+        # Use minimal dict format
+        items = [f"{k}:{compact_format(v)}" for k, v in x.items()]
+        return "{" + ",".join(items) + "}"
+    elif isinstance(x, (int, float, bool)) or x is None:
+        return str(x)
+    else:
+        return str(x)
+
+
 def to_jsonable(x: Any) -> Any:
-    """Convert a value to a JSON-able format."""
+    """Convert a value to a JSON-able format with compact representation."""
     if isinstance(x, frozenset):
-        return {"__frozenset__": [to_jsonable(v) for v in x]}
+        # Compact: just convert to list without metadata wrapper
+        return [to_jsonable(v) for v in x]
     if isinstance(x, tuple):
-        return {"__tuple__": [to_jsonable(v) for v in x]}
+        # Compact: just convert to list without metadata wrapper
+        return [to_jsonable(v) for v in x]
     if isinstance(x, set):
-        return {"__set__": [to_jsonable(v) for v in x]}
+        return [to_jsonable(v) for v in x]
     if isinstance(x, dict):
         return {k: to_jsonable(v) for k, v in x.items()}
     if isinstance(x, (list, int, float, str, bool)) or x is None:
         return x
-    return {"__str__": str(x)}  # last resort
+    return str(x)  # Compact: direct string conversion
 
 
 def preprocess_json_file(input_file: str, output_file: str) -> None:
-    """Convert inputs and outputs to JSON strings for consistency."""
+    """Prepare data for dataset loading without double JSON encoding."""
     with open(input_file, "r") as f:
         data = json.load(f)
 
-    # Convert inputs and outputs to JSON strings for consistency
-    for record in data:
-        if record["shots"]:
-            for shot in record["shots"]:
-                shot["inputs"] = json.dumps(shot["inputs"])
-                shot["output"] = json.dumps(shot["output"])
-
+    # Keep inputs and outputs as objects - no need to stringify them
+    # The double JSON encoding was causing massive token bloat
     with open(output_file, "w") as f:
         json.dump(data, f, indent=2)
 

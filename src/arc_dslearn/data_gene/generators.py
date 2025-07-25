@@ -26,13 +26,13 @@ def rand_color() -> int:
     return random.randint(0, 9)
 
 
-def rand_grid(max_side: int = 5) -> T.Grid:
+def rand_grid(max_side: int = 20) -> T.Grid:
     """Generate a random grid."""
     h, w = random.randint(1, max_side), random.randint(1, max_side)
     return tuple(tuple(rand_color() for _ in range(w)) for _ in range(h))  # type: ignore[return-value]
 
 
-def rand_object(max_side: int = 5) -> T.Object:
+def rand_object(max_side: int = 8) -> T.Object:
     """Generate a random object."""
     g = rand_grid(max_side)
     triples = {
@@ -49,7 +49,7 @@ def rand_object(max_side: int = 5) -> T.Object:
     return frozenset(triples)
 
 
-def rand_indices(max_side: int = 5) -> T.Indices:
+def rand_indices(max_side: int = 8) -> T.Indices:
     """Generate a random set of indices."""
     h, w = random.randint(1, max_side), random.randint(1, max_side)
     coords = {
@@ -69,22 +69,20 @@ def rand_int_tuple() -> Tuple[int, int]:
 
 def rand_int_frozenset() -> FrozenSet[int]:
     """Generate a random frozenset of integers."""
-    size = random.randint(1, 5)  # Ensure at least size 1
+    size = random.randint(1, 10)  # Ensure at least size 1
     result: set[int] = set()
     while len(result) < size:
-        result.add(random.randint(0, 9))
+        result.add(random.randint(0, 10))
         # Prevent infinite loop if trying to get more than 10 unique values
-        if len(result) >= 10:
-            break
     return frozenset(result)
 
 
 def rand_container(depth: int = 1) -> Any:
     """Generate a very general container generator: depth=1 → tuple of ints, depth=2 → tuple of tuple of ints."""
     if depth == 1:
-        size = random.randint(1, 5)  # Ensure at least size 1
+        size = random.randint(1, 8)  # Ensure at least size 1
         return tuple(random.randint(0, 9) for _ in range(size))
-    size = random.randint(1, 4)  # Ensure at least size 1
+    size = random.randint(1, 8)  # Ensure at least size 1
     return tuple(rand_container(depth - 1) for _ in range(size))
 
 
@@ -97,12 +95,12 @@ def variant_generators(name: str, anno: Any, func_name: str = "") -> list[Callab
     if anno in {T.Patch, "Patch"}:
         # Functions that need non-empty collections
         if func_name in {"bordering", "center", "inbox", "outbox", "corners"}:
-            return [lambda: rand_object(max_side=3), lambda: rand_indices(max_side=3)]
+            return [lambda: rand_object(), lambda: rand_indices()]
         # Functions that need count method - use tuples instead of frozensets
         elif func_name in {"mostcommon", "leastcommon"}:
             return [
-                lambda: tuple(rand_color() for _ in range(random.randint(3, 8))),
-                lambda: tuple(rand_color() for _ in range(random.randint(4, 10))),
+                lambda: tuple(rand_color() for _ in range(random.randint(1, 9))),
+                lambda: tuple(rand_color() for _ in range(random.randint(1, 9))),
             ]
         return [rand_object, rand_indices]
     if anno in {T.Object, "Object"}:
@@ -121,8 +119,8 @@ def variant_generators(name: str, anno: Any, func_name: str = "") -> list[Callab
     if anno in {T.Objects, "Objects"}:
         # Generate a frozenset of objects
         return [
-            lambda: frozenset([rand_object(max_side=3) for _ in range(random.randint(1, 3))]),
-            lambda: frozenset([rand_object(max_side=2) for _ in range(random.randint(2, 4))]),
+            lambda: frozenset([rand_object() for _ in range(random.randint(1, 3))]),
+            lambda: frozenset([rand_object() for _ in range(random.randint(2, 4))]),
         ]
     if anno in {T.Indices, "Indices"}:
         # Functions that need non-empty indices
@@ -135,16 +133,16 @@ def variant_generators(name: str, anno: Any, func_name: str = "") -> list[Callab
             "mostcommon",
             "leastcommon",
         }:
-            return [lambda: rand_indices(max_side=3)]
+            return [lambda: rand_indices()]
         return [rand_indices]
     if anno in {T.IndicesSet, "IndicesSet"}:
         # Generate a frozenset of indices
         return [
-            lambda: frozenset([rand_indices(max_side=3) for _ in range(random.randint(1, 3))]),
-            lambda: frozenset([rand_indices(max_side=2) for _ in range(random.randint(2, 4))]),
+            lambda: frozenset([rand_indices() for _ in range(random.randint(1, 3))]),
+            lambda: frozenset([rand_indices() for _ in range(random.randint(2, 4))]),
         ]
     if anno in {T.Grid, "Grid"} or "grid" in name.lower():
-        return [lambda: rand_grid(max_side=2), rand_grid]
+        return [lambda: rand_grid(), rand_grid]
     if anno in {T.Element, "Element"}:
         return [rand_grid, rand_object]
     if anno in {T.Piece, "Piece"}:
@@ -164,7 +162,7 @@ def variant_generators(name: str, anno: Any, func_name: str = "") -> list[Callab
         ):
             return [lambda: random.randint(1, 9), lambda: random.randint(1, 9)]
         else:
-            return [lambda: 0, lambda: random.randint(1, 4)]
+            return [lambda: 0, lambda: random.randint(1, 9)]
     if anno in {T.IntegerTuple, "IntegerTuple"} or any(
         k in name.lower() for k in ["coord", "delta", "offset", "direction"]
     ):
@@ -176,7 +174,7 @@ def variant_generators(name: str, anno: Any, func_name: str = "") -> list[Callab
     if anno in {T.ContainerContainer, "ContainerContainer"}:
         # Generate container of containers
         return [
-            lambda: (rand_container(), rand_container()),
+            lambda: (rand_container(2), rand_container()),
             lambda: (rand_object(), rand_indices(), rand_int_frozenset()),
             lambda: frozenset([rand_object(), rand_indices()]),
         ]
@@ -208,7 +206,7 @@ def variant_generators(name: str, anno: Any, func_name: str = "") -> list[Callab
         elif func_name == "sizefilter":
             return [
                 lambda: (rand_object(), rand_indices(), rand_object()),
-                lambda: (rand_container(2), rand_container(2), rand_grid()),
+                lambda: (rand_container(2), rand_container(), rand_grid()),
                 lambda: frozenset([rand_object(), rand_indices(), rand_grid()]),
             ]
         elif func_name in ["first", "last", "color", "colorfilter", "totuple", "other"]:

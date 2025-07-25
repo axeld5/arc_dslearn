@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import inspect
 import random
-from pprint import pformat
 from typing import Any, Callable, get_origin
 
 import src.arc_dslearn.arc_dsl.dsl as dsl
 
-from .data_processing import to_jsonable
+from .data_processing import compact_format, to_jsonable
 from .generators import variant_generators
 
 
@@ -27,7 +26,7 @@ DSL_FUNCTIONS_BLOCK = dsl_functions_summary()
 
 
 def make_block(
-    func: Callable[..., Any], min_shots: int = 2, max_shots: int = 5, seed: int | None = None
+    func: Callable[..., Any], min_shots: int = 2, max_shots: int = 4, seed: int | None = None
 ) -> dict[str, Any]:
     """Generate a block of code for a DSL function."""
     # Use seeded randomness for additional stability
@@ -80,13 +79,14 @@ def make_block(
         "DSL reference:\n" + DSL_FUNCTIONS_BLOCK
     )
 
-    # few‑shot part the model sees *before* the task
+    # few‑shot part the model sees *before* the task - using compact format
     examples_txt: list[str] = []
     for k, s in enumerate(shots, 1):
         examples_txt.append(f"# Example {k}")
         for arg_name, val in s["inputs"].items():
-            examples_txt.append(f"{arg_name.upper()} = {pformat(val)}")
-        examples_txt.append(f"# Desired → {pformat(s['output'])}\n")
+            # Use compact format instead of pformat to save massive tokens
+            examples_txt.append(f"{arg_name.upper()} = {compact_format(val)}")
+        examples_txt.append(f"# Desired → {compact_format(s['output'])}\n")
 
     user_prompt = (
         "\n".join(examples_txt) + "### Task\n"
