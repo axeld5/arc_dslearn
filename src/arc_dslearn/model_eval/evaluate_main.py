@@ -10,6 +10,8 @@ import pandas as pd
 
 from .evaluate_models_base import evaluate_base_model_simple
 from .evaluate_models_finetuned import evaluate_finetuned_models
+from .evaluate_rl_only import evaluate_rl_model
+from .evaluate_sft_only import evaluate_sft_model
 
 
 def create_comparison_plots(
@@ -50,35 +52,10 @@ def create_comparison_plots(
 
     # Add value labels on bars
     for i, v in enumerate(acc_df["accuracy"]):
-        ax.text(v + 0.01, i, f"{v:.3f}", va="center")
+        ax.text(v + 0.01, i, f"{v:.3f}", va="center", fontsize=9)
 
     plt.tight_layout()
-    plt.savefig("chart_results/model_comparison_all.png", dpi=300, bbox_inches="tight")
-    plt.close()
-
-    # Create base model specific comparison
-    base_comparison = {
-        "Base (DSL prompt)": dsl_results.get("base", 0.0),
-        "Base (Simple prompt)": simple_results.get("base_simple", 0.0),
-    }
-
-    base_df = pd.Series(base_comparison).to_frame("accuracy")
-    ax = base_df["accuracy"].plot(
-        kind="bar",
-        figsize=(8, 5),
-        title="Base Model: DSL vs Simple Prompt Comparison",
-        color=["lightcoral", "lightgreen"],
-        rot=45,
-    )
-    ax.set_ylabel("accuracy")
-    ax.set_ylim(0, max(base_comparison.values()) * 1.2)
-
-    # Add value labels on bars
-    for i, v in enumerate(base_df["accuracy"]):
-        ax.text(i, v + 0.01, f"{v:.3f}", ha="center", va="bottom")
-
-    plt.tight_layout()
-    plt.savefig("chart_results/base_model_comparison.png", dpi=300, bbox_inches="tight")
+    plt.savefig("chart_results/model_comparison_complete.png", dpi=150, bbox_inches="tight")
     plt.close()
 
 
@@ -127,78 +104,70 @@ def print_comprehensive_results(
     print(f"Overall Best:   {overall_best[0]} ({overall_best[1] * 100:.1f}%)")
 
 
-def main() -> None:
-    """Coordinate both evaluations."""
-    parser = argparse.ArgumentParser(description="Run comprehensive model evaluation")
+def main():
+    """Evaluate ARC DSL models with CLI options."""
+    parser = argparse.ArgumentParser(description="Evaluate ARC DSL models")
     parser.add_argument(
-        "--skip-dsl", action="store_true", help="Skip DSL prompt evaluation (useful for testing)"
+        "--mode",
+        choices=["all", "dsl", "simple", "sft-only", "rl-only"],
+        default="all",
+        help="Evaluation mode to run",
     )
     parser.add_argument(
-        "--skip-simple",
-        action="store_true",
-        help="Skip simple prompt evaluation (useful for testing)",
+        "--skip-plots", action="store_true", help="Skip generating comparison plots"
     )
-    args = parser.parse_args()
 
-    print("🚀 Starting Comprehensive Model Evaluation")
-    print("=" * 50)
+    args = parser.parse_args()
 
     dsl_results = {}
     simple_results = {}
 
-    # Run DSL prompt evaluation (fine-tuned models + base)
-    if not args.skip_dsl:
-        print("\n📋 Phase 1: Evaluating with DSL prompts...")
-        print("Models: base, sft, rl")
-        try:
-            dsl_results = evaluate_finetuned_models()
-            print("✅ DSL evaluation completed")
-        except Exception as e:
-            print(f"❌ DSL evaluation failed: {e}")
-            return
-    else:
-        print("⏭️  Skipping DSL evaluation")
+    if args.mode in ["all", "dsl"]:
+        print("=" * 60)
+        print("🔍 Running DSL Prompt Evaluation (all models)...")
+        print("=" * 60)
+        dsl_results = evaluate_finetuned_models()
 
-    # Run simple prompt evaluation (base model only)
-    if not args.skip_simple:
-        print("\n📋 Phase 2: Evaluating base model with simple prompt...")
-        try:
-            simple_results = evaluate_base_model_simple()
-            print("✅ Simple prompt evaluation completed")
-        except Exception as e:
-            print(f"❌ Simple prompt evaluation failed: {e}")
-            return
-    else:
-        print("⏭️  Skipping simple prompt evaluation")
+    if args.mode in ["all", "simple"]:
+        print("\n" + "=" * 60)
+        print("🔍 Running Simple Prompt Evaluation (all models)...")
+        print("=" * 60)
+        simple_results = evaluate_base_model_simple()
 
-    # Generate comparison plots and analysis
-    if dsl_results and simple_results:
-        print("\n📊 Generating comparison plots...")
+    if args.mode == "sft-only":
+        print("=" * 60)
+        print("🔍 Running SFT Model Only Evaluation...")
+        print("=" * 60)
+        sft_results = evaluate_sft_model()
+        print(f"\n✅ SFT evaluation complete! Accuracy: {sft_results['sft']:.3f}")
+
+    if args.mode == "rl-only":
+        print("=" * 60)
+        print("🔍 Running RL Model Only Evaluation...")
+        print("=" * 60)
+        rl_results = evaluate_rl_model()
+        print(f"\n✅ RL evaluation complete! Accuracy: {rl_results['rl']:.3f}")
+
+    # Create comparison plots only for combined evaluations
+    if args.mode == "all" and not args.skip_plots and dsl_results and simple_results:
+        print("\n" + "=" * 60)
+        print("📊 Creating Comparison Plots...")
+        print("=" * 60)
         create_comparison_plots(dsl_results, simple_results)
-        print("✅ Comparison plots saved")
 
-        print_comprehensive_results(dsl_results, simple_results)
+        print("\n✅ Evaluation complete! Generated plots:")
+        print(" • chart_results/model_comparison_complete.png")
+        print(" • Individual model accuracy and error rate plots")
 
-        print("\n💾 Generated Files:")
-        print("   • chart_results/model_comparison_all.png")
-        print("   • chart_results/base_model_comparison.png")
-        print("   • chart_results/model_accuracy_dsl.png")
-        print("   • chart_results/model_accuracy_base_simple.png")
-        print("   • chart_results/error_rate_*_dsl.png")
-        print("   • chart_results/error_rate_base_simple.png")
+    if args.mode in ["dsl", "simple"] and dsl_results:
+        print("\n✅ DSL evaluation complete!")
+        for model, acc in dsl_results.items():
+            print(f" • {model}: {acc:.3f}")
 
-    elif dsl_results:
-        print("\n📊 Only DSL results available - check DSL-specific plots")
-        print_comprehensive_results(dsl_results, {})
-
-    elif simple_results:
-        print("\n📊 Only simple prompt results available")
-        print_comprehensive_results({}, simple_results)
-
-    else:
-        print("❌ No results to display")
-
-    print("\n🎉 Evaluation complete!")
+    if args.mode in ["dsl", "simple"] and simple_results:
+        print("\n✅ Simple prompt evaluation complete!")
+        for model, acc in simple_results.items():
+            print(f" • {model}: {acc:.3f}")
 
 
 if __name__ == "__main__":
