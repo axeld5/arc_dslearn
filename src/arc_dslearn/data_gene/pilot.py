@@ -11,7 +11,11 @@ import src.arc_dslearn.arc_dsl.dsl as dsl
 
 from .block_generation import make_block, should_skip_function
 from .cleanup import remove_long_token_samples
-from .data_processing import create_train_eval_split, prepare_datasets_for_loading
+from .data_processing import (
+    create_train_eval_split,
+    prepare_datasets_for_loading,
+    remove_answer_overlap,
+)
 
 
 def main(generation_seed: int = 42) -> Sequence[dict[str, Any]]:
@@ -49,20 +53,56 @@ if __name__ == "__main__":
         json.dump(training_blocks, fp, indent=2, default=lambda o: pformat(o))
     print(f"✓ Wrote train_set.json with {len(training_blocks)} examples")
 
-    # Step 2: Create train/eval split
+    # Step 2: Create train/eval split (use filtered data)
     print("\nStep 2: Creating train/eval split...")
-    train_data, eval_data = create_train_eval_split()
+    train_data, eval_data = create_train_eval_split(src_file="train_set.json")
 
     # Step 3: Preprocess for dataset loading
     print("\nStep 3: Preprocessing for dataset loading...")
     remove_long_token_samples("train_split.json", "train_split.json")
     remove_long_token_samples("eval_split.json", "eval_split.json")
+    print("✓ Saved filtered data to train_split.json and eval_split.json")
+
+    # Step 3.5: Remove answer overlaps from both splits
+    print("\nStep 3.5: Removing answer overlaps from train split...")
+    filtered_train_data, train_overlap_stats = remove_answer_overlap(
+        "train_split.json", "train_split.json"
+    )
+    print("✓ Saved filtered train data to train_split.json")
+
+    # Combine stats for summary
+    total_shots_removed = train_overlap_stats["shots_removed"]
+    total_ambiguous = train_overlap_stats["ambiguous_pairs"]
+    total_unsolvable = train_overlap_stats["unsolvable_pairs"]
+
+    overlap_stats = {
+        "shots_removed": total_shots_removed,
+        "ambiguous_pairs": total_ambiguous,
+        "unsolvable_pairs": total_unsolvable,
+        "functions_affected": sorted(set(train_overlap_stats["functions_affected"])),
+        "dsl_functions_tested": train_overlap_stats["dsl_functions_tested"],
+        "criteria": train_overlap_stats["criteria"],
+    }
+
+    # Step 4: Prepare datasets for loading
+    print("\nStep 4: Preparing datasets for loading...")
     prepare_datasets_for_loading()
+    print("✓ Saved filtered data to train_split.json and eval_split.json")
 
     print("\n✓ Pipeline complete! Ready to use:")
-    print(f"  - train_set.json ({len(training_blocks)} examples)")
-    print(f"  - train_split.json ({len(train_data)} examples)")
-    print(f"  - eval_split.json ({len(eval_data)} examples)")
+    print(f"  - train_set.json ({len(training_blocks)} examples - original)")
+    print(f"  - train_split.json ({len(filtered_train_data)} examples - filtered)")
+    print(f"  - eval_split.json ({len(eval_data)} examples - original)")
+
+    # Show overlap statistics
+    if overlap_stats["shots_removed"] > 0:
+        print("\n📊 Overlap removal statistics:")
+        print(f"  - Ambiguous I/O pairs: {overlap_stats['ambiguous_pairs']}")
+        print(f"  - Unsolvable I/O pairs: {overlap_stats['unsolvable_pairs']}")
+        print(f"  - Functions affected: {len(overlap_stats['functions_affected'])}")
+        print(f"  - Shots removed: {overlap_stats['shots_removed']}")
+        print(f"  - DSL functions tested: {overlap_stats['dsl_functions_tested']}")
+        print(f"  - Criteria: {overlap_stats['criteria']}")
 
     # Optional: Show how to load the datasets
     print("\nTo load the datasets:")
