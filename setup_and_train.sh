@@ -37,7 +37,7 @@ echo "✓ Dependencies synced successfully"
 
 # Step 2.5: Install flash-attn
 echo "Step 2.5: Installing flash-attn..."
-uv pip install flash-attn --no-build-isolation
+uv run pip install flash-attn --no-build-isolation
 echo "✓ flash-attn installed successfully"
 
 # Step 3: Generate training data
