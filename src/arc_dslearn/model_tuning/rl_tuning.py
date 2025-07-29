@@ -26,7 +26,7 @@ if __name__ == "__main__":
     load_dotenv()
     login(os.getenv("HF_TOKEN"))
     BASE_MODEL = "Qwen/Qwen2.5-Coder-1.5B"
-    LORA_PATH = "qwen2.5_1.5b_coder_dslearn_os_sft/final"  # ← your SFT–LoRA adapter
+    LORA_PATH = "qwen2.5_coder_dslearn_os_sft/final"  # ← your SFT–LoRA adapter
     DATA_PATH = "train_split.json"  # same JSON as before
 
     # ---------------------------------------------------------------------
@@ -71,7 +71,7 @@ if __name__ == "__main__":
     # 4. GSPO config  – add **mandatory** generation parameters
     # ---------------------------------------------------------------------
     grpo_cfg = GSPOConfig(
-        output_dir="qwen2.5_1.5b_coder_dslearn_os_rl",
+        output_dir="qwen2.5_coder_dslearn_os_rl",
         per_device_train_batch_size=1,
         gradient_accumulation_steps=8,
         num_train_epochs=1,
@@ -108,4 +108,11 @@ if __name__ == "__main__":
     )
 
     trainer.train()
-    trainer.save_model("qwen2.5_1.5b_coder_dslearn_os_rl/final")
+    trainer.save_model("qwen2.5_coder_dslearn_os_rl/final")
+
+    # Optional: Save to hub
+    model.push_to_hub(
+        "axel-darmouni/qwen2.5-coder-arc-dslearn-rl",
+        tokenizer=tokenizer,
+        token=os.getenv("HF_TOKEN"),
+    )

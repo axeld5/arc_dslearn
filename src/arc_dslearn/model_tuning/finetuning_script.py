@@ -144,7 +144,7 @@ if __name__ == "__main__":
     collator = DataCollatorForCausalLMWithPadding(tokenizer=tokenizer)
 
     args = TrainingArguments(
-        output_dir="qwen2.5_1.5b_coder_dslearn_os_sft",
+        output_dir="qwen2.5_coder_dslearn_os_sft",
         per_device_train_batch_size=1,
         gradient_accumulation_steps=8,  # effective 32
         num_train_epochs=3,
@@ -167,4 +167,11 @@ if __name__ == "__main__":
     trainer = Trainer(model=model, args=args, train_dataset=tokenised_ds, data_collator=collator)  # type: ignore
 
     trainer.train()  # type: ignore
-    trainer.save_model("qwen2.5_1.5b_coder_dslearn_os_sft/final")  # type: ignore
+    trainer.save_model("qwen2.5_coder_dslearn_os_sft/final")  # type: ignore
+
+    # Optional: Save to hub
+    model.push_to_hub(
+        "axel-darmouni/qwen2.5-coder-arc-dslearn-sft",
+        tokenizer=tokenizer,
+        token=os.getenv("HF_TOKEN"),
+    )
