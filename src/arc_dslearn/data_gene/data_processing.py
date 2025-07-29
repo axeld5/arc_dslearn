@@ -134,16 +134,16 @@ def _can_function_solve_io(func: Callable, inputs: dict[str, Any], expected_outp
 def remove_answer_overlap(
     input_file: str, output_file: str | None = None, min_solutions: int = 1, max_solutions: int = 1
 ) -> Tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Remove samples where multiple DSL functions can produce the same output from the same input.
+    """Remove training blocks where multiple DSL functions can solve ALL shots for that block.
 
-    Keeps only I/O pairs that have a unique solution (or within the specified range).
+    This identifies true ambiguity where multiple functions could be the correct answer.
 
     Args:
     ----
         input_file: Path to the JSON file containing training blocks
         output_file: Path to save the filtered data (optional, if None, overwrites input_file)
-        min_solutions: Minimum number of functions that should solve the I/O pair
-        max_solutions: Maximum number of functions that should solve the I/O pair
+        min_solutions: Minimum number of functions that should solve ALL shots in a block
+        max_solutions: Maximum number of functions that should solve ALL shots in a block
 
     Returns:
     -------
@@ -162,66 +162,63 @@ def remove_answer_overlap(
     print(f"Found {len(dsl_functions)} valid DSL functions to test")
 
     # Track statistics
-    total_shots = 0
-    shots_removed = 0
-    ambiguous_pairs = []
-    unsolvable_pairs = []
+    total_blocks = 0
+    blocks_removed = 0
+    ambiguous_blocks = []
+    unsolvable_blocks = []
     functions_affected = set()
 
     filtered_data = []
 
     for block in data:
         func_name = block["name"]
+        total_blocks += 1
 
         if "shots" not in block or not block["shots"]:
             filtered_data.append(block)
             continue
 
-        filtered_shots = []
-
+        # Convert all shots from JSON format back to original
+        shots_data = []
         for shot in block["shots"]:
-            total_shots += 1
-
-            # Convert from JSON format back to original
             inputs = from_jsonable(shot["inputs"])
             expected_output = from_jsonable(shot["output"])
+            shots_data.append((inputs, expected_output))
 
-            # Test all DSL functions on this I/O pair
-            solving_functions = []
-            for dsl_name, dsl_func in dsl_functions.items():
-                if _can_function_solve_io(dsl_func, inputs, expected_output):
-                    solving_functions.append(dsl_name)
+        # Test which DSL functions can solve ALL shots in this block
+        solving_functions = []
+        for dsl_name, dsl_func in dsl_functions.items():
+            can_solve_all = True
+            for inputs, expected_output in shots_data:
+                if not _can_function_solve_io(dsl_func, inputs, expected_output):
+                    can_solve_all = False
+                    break
 
-            num_solutions = len(solving_functions)
+            if can_solve_all:
+                solving_functions.append(dsl_name)
 
-            # Check if this I/O pair meets our criteria
-            if min_solutions <= num_solutions <= max_solutions:
-                filtered_shots.append(shot)
+        num_solutions = len(solving_functions)
+
+        # Check if this block meets our criteria
+        if min_solutions <= num_solutions <= max_solutions:
+            filtered_data.append(block)
+        else:
+            blocks_removed += 1
+            functions_affected.add(func_name)
+
+            if num_solutions == 0:
+                unsolvable_blocks.append({
+                    "function": func_name,
+                    "shots": shots_data[:3],  # Include first 3 shots for debugging
+                    "solving_functions": solving_functions,
+                })
             else:
-                shots_removed += 1
-                functions_affected.add(func_name)
-
-                if num_solutions == 0:
-                    unsolvable_pairs.append({
-                        "function": func_name,
-                        "inputs": inputs,
-                        "expected_output": expected_output,
-                        "solving_functions": solving_functions,
-                    })
-                else:
-                    ambiguous_pairs.append({
-                        "function": func_name,
-                        "inputs": inputs,
-                        "expected_output": expected_output,
-                        "solving_functions": solving_functions,
-                        "num_solutions": num_solutions,
-                    })
-
-        # Only keep blocks that still have shots after filtering
-        if filtered_shots:
-            filtered_block = block.copy()
-            filtered_block["shots"] = filtered_shots
-            filtered_data.append(filtered_block)
+                ambiguous_blocks.append({
+                    "function": func_name,
+                    "shots": shots_data[:3],  # Include first 3 shots for debugging
+                    "solving_functions": solving_functions,
+                    "num_solutions": num_solutions,
+                })
 
     # Save filtered data
     with open(output_file, "w") as f:
@@ -229,24 +226,28 @@ def remove_answer_overlap(
 
     # Prepare statistics
     overlap_stats = {
-        "total_shots": total_shots,
-        "shots_removed": shots_removed,
-        "shots_kept": total_shots - shots_removed,
-        "ambiguous_pairs": len(ambiguous_pairs),
-        "unsolvable_pairs": len(unsolvable_pairs),
+        "total_blocks": total_blocks,
+        "blocks_removed": blocks_removed,
+        "blocks_kept": total_blocks - blocks_removed,
+        "ambiguous_blocks": len(ambiguous_blocks),
+        "unsolvable_blocks": len(unsolvable_blocks),
         "functions_affected": list(functions_affected),
         "blocks_before": len(data),
         "blocks_after": len(filtered_data),
-        "criteria": f"{min_solutions}-{max_solutions} solutions",
+        "criteria": f"{min_solutions}-{max_solutions} solutions for ALL shots",
         "dsl_functions_tested": len(dsl_functions),
         # Include details for debugging (limited to prevent huge output)
-        "ambiguous_examples": ambiguous_pairs[:5],
-        "unsolvable_examples": unsolvable_pairs[:5],
+        "ambiguous_examples": ambiguous_blocks[:5],
+        "unsolvable_examples": unsolvable_blocks[:5],
     }
 
-    print(f"✓ Removed {shots_removed}/{total_shots} shots with ambiguous or unsolvable I/O pairs")
-    print(f"✓ Found {len(ambiguous_pairs)} ambiguous pairs (multiple solutions)")
-    print(f"✓ Found {len(unsolvable_pairs)} unsolvable pairs (no solutions)")
+    print(f"✓ Removed {blocks_removed}/{total_blocks} blocks with ambiguous or unsolvable patterns")
+    print(
+        f"✓ Found {len(ambiguous_blocks)} ambiguous blocks (multiple DSL functions can solve ALL shots)"
+    )
+    print(
+        f"✓ Found {len(unsolvable_blocks)} unsolvable blocks (no DSL function can solve ALL shots)"
+    )
     print(f"✓ Blocks: {len(data)} → {len(filtered_data)}")
     print(f"✓ Functions affected: {len(functions_affected)}")
     if functions_affected:

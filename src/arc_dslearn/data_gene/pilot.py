@@ -71,14 +71,14 @@ if __name__ == "__main__":
     print("✓ Saved filtered train data to train_split.json")
 
     # Combine stats for summary
-    total_shots_removed = train_overlap_stats["shots_removed"]
-    total_ambiguous = train_overlap_stats["ambiguous_pairs"]
-    total_unsolvable = train_overlap_stats["unsolvable_pairs"]
+    total_blocks_removed = train_overlap_stats["blocks_removed"]
+    total_ambiguous = train_overlap_stats["ambiguous_blocks"]
+    total_unsolvable = train_overlap_stats["unsolvable_blocks"]
 
     overlap_stats = {
-        "shots_removed": total_shots_removed,
-        "ambiguous_pairs": total_ambiguous,
-        "unsolvable_pairs": total_unsolvable,
+        "blocks_removed": total_blocks_removed,
+        "ambiguous_blocks": total_ambiguous,
+        "unsolvable_blocks": total_unsolvable,
         "functions_affected": sorted(set(train_overlap_stats["functions_affected"])),
         "dsl_functions_tested": train_overlap_stats["dsl_functions_tested"],
         "criteria": train_overlap_stats["criteria"],
@@ -95,12 +95,12 @@ if __name__ == "__main__":
     print(f"  - eval_split.json ({len(eval_data)} examples - original)")
 
     # Show overlap statistics
-    if overlap_stats["shots_removed"] > 0:
+    if overlap_stats["blocks_removed"] > 0:
         print("\n📊 Overlap removal statistics:")
-        print(f"  - Ambiguous I/O pairs: {overlap_stats['ambiguous_pairs']}")
-        print(f"  - Unsolvable I/O pairs: {overlap_stats['unsolvable_pairs']}")
+        print(f"  - Blocks removed: {overlap_stats['blocks_removed']}")
+        print(f"  - Ambiguous blocks: {overlap_stats['ambiguous_blocks']}")
+        print(f"  - Unsolvable blocks: {overlap_stats['unsolvable_blocks']}")
         print(f"  - Functions affected: {len(overlap_stats['functions_affected'])}")
-        print(f"  - Shots removed: {overlap_stats['shots_removed']}")
         print(f"  - DSL functions tested: {overlap_stats['dsl_functions_tested']}")
         print(f"  - Criteria: {overlap_stats['criteria']}")
 
