@@ -159,7 +159,7 @@ if __name__ == "__main__":
         logging_dir="tb_logs",  # <- where events get written
         report_to="tensorboard",
         remove_unused_columns=False,
-        deepspeed="ds_config_zero2.json",
+        deepspeed="src/arc_dslearn/model_tuning/ds_config_zero2.json",
         ddp_find_unused_parameters=False,
         push_to_hub=True,
     )

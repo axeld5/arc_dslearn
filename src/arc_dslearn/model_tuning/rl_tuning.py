@@ -88,7 +88,7 @@ if __name__ == "__main__":
         max_completion_length=64,
         remove_unused_columns=False,  # we keep "shots"
         push_to_hub=True,
-        deepspeed="ds_config_zero2.json",
+        deepspeed="src/arc_dslearn/model_tuning/ds_config_zero2.json",
         ddp_find_unused_parameters=False,
     )
 
