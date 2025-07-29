@@ -12,8 +12,8 @@ from dotenv import load_dotenv
 from huggingface_hub import login
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import (
-    GRPOConfig,
-    GRPOTrainer,
+    GSPOConfig,
+    GSPOTrainer,
 )
 
 from src.arc_dslearn.metrics_and_rewards.reward_fn import reward_fn
@@ -68,9 +68,9 @@ if __name__ == "__main__":
     ds = raw_ds.map(to_rl, remove_columns=raw_ds.column_names, num_proc=4)
 
     # ---------------------------------------------------------------------
-    # 4. GRPO config  – add **mandatory** generation parameters
+    # 4. GSPO config  – add **mandatory** generation parameters
     # ---------------------------------------------------------------------
-    grpo_cfg = GRPOConfig(
+    grpo_cfg = GSPOConfig(
         output_dir="qwen2.5_1.5b_coder_dslearn_os_rl",
         per_device_train_batch_size=1,
         gradient_accumulation_steps=8,
@@ -99,7 +99,7 @@ if __name__ == "__main__":
     #     • `reward_funcs` must be **list or callable** – both work, but
     #       passing a list keeps the API identical to the working script.
     # ---------------------------------------------------------------------
-    trainer = GRPOTrainer(
+    trainer = GSPOTrainer(
         model=model,
         processing_class=tokenizer,
         reward_funcs=[reward_fn],
