@@ -25,7 +25,7 @@ def evaluate_rl_model() -> Dict[str, float]:
     results: Dict[str, float] = {}
 
     # ------------------------------------------------------------------ paths
-    LORA_RL_DIR = "qwen2.5_coder_dslearn_os_rl_unsloth/final"
+    LORA_RL_DIR = "qwen2.5_coder_dslearn_os_rl/final"
     EVAL_FILE = "eval_split.json"
 
     MAX_NEW = 64

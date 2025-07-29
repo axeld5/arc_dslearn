@@ -5,9 +5,6 @@ from __future__ import annotations
 import os
 from typing import Any, Dict
 
-import unsloth
-import torch
-
 from datasets import load_dataset
 from dotenv import load_dotenv
 from huggingface_hub import login
@@ -26,7 +23,7 @@ from ..utils import from_jsonable
 if __name__ == "__main__":
     load_dotenv()
     login(os.getenv("HF_TOKEN"))
-    LORA_PATH = "/home/user/arc_dslearn/qwen2.5_coder_dslearn_os_sft_unsloth/"
+    LORA_PATH = "/home/user/arc_dslearn/qwen2.5_coder_dslearn_os_sft/"
 
     DATA_PATH = "train_split.json"
     MAX_LEN = 8192
@@ -69,7 +66,7 @@ if __name__ == "__main__":
     # 4. GRPO config with Unsloth optimizations
     # ---------------------------------------------------------------------
     grpo_cfg = GRPOConfig(
-        output_dir="qwen2.5_coder_dslearn_os_rl_unsloth",
+        output_dir="qwen2.5_coder_dslearn_os_rl",
         per_device_train_batch_size=2,  # Can increase with Unsloth optimizations
         gradient_accumulation_steps=4,  # Reduced due to higher batch size
         num_train_epochs=1,
@@ -113,7 +110,7 @@ if __name__ == "__main__":
     trainer.train()
 
     # Save the model
-    trainer.save_model("qwen2.5_coder_dslearn_os_rl_unsloth/final")
+    trainer.save_model("qwen2.5_coder_dslearn_os_rl/final")
 
     # Optional: Save to hub
     model.push_to_hub(

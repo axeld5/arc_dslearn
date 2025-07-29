@@ -25,7 +25,7 @@ def evaluate_sft_model() -> Dict[str, float]:
     results: Dict[str, float] = {}
 
     # ------------------------------------------------------------------ paths
-    LORA_SFT_DIR = "qwen2.5_coder_dslearn_os_sft_unsloth/final"
+    LORA_SFT_DIR = "qwen2.5_coder_dslearn_os_sft/final"
     EVAL_FILE = "eval_split.json"
 
     MAX_NEW = 64
