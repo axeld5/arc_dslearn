@@ -14,7 +14,7 @@ from trl import SFTTrainer
 from unsloth import FastLanguageModel
 
 if __name__ == "__main__":
-    MODEL_NAME = "Qwen/Qwen2.5-Coder-7B-Instruct"
+    MODEL_NAME = "Qwen/Qwen2.5-Coder-7B"
     DATA_FILE = "train_split.json"
     MAX_LEN = 8192
 

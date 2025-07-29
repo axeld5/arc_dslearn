@@ -17,7 +17,7 @@ from transformers import (  # type: ignore
 )
 
 if __name__ == "__main__":
-    MODEL_NAME = "Qwen/Qwen2.5-Coder-1.5B-Instruct"  # base (not –Instruct)
+    MODEL_NAME = "Qwen/Qwen2.5-Coder-1.5B"  # base (not –Instruct)
     DATA_FILE = "train_split.json"  # produced by your script
     MAX_LEN = 8192  # stay well below 32 k context
 
