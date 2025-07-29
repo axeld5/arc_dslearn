@@ -52,7 +52,12 @@ echo "✓ RL training completed successfully"
 
 # Step 6: Run evaluation
 echo "Step 6: Starting evaluation with $N_GPUS GPUs..."
-uv run python -m arc_dslearn.model_eval.evaluate_main
+uv run python -m arc_dslearn.model_eval.evaluate_sft_only
+echo "✓ Evaluation completed successfully"
+
+# Step 7: Run evaluation
+echo "Step 7: Starting evaluation with $N_GPUS GPUs..."
+uv run python -m arc_dslearn.model_eval.evaluate_rl_only
 echo "✓ Evaluation completed successfully"
 
 echo "=================================================="

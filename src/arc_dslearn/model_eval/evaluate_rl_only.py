@@ -11,7 +11,10 @@ from typing import Any, Dict, Tuple
 import matplotlib.pyplot as plt
 import pandas as pd
 import torch
-from unsloth import FastLanguageModel
+from transformers import (  # type: ignore
+    AutoModelForCausalLM,
+    AutoTokenizer,
+)
 
 from src.arc_dslearn.metrics_and_rewards.reward_fn import equivalent, extract_python_code, safe_exec
 from src.arc_dslearn.utils import from_jsonable
@@ -30,7 +33,6 @@ def evaluate_rl_model() -> Dict[str, float]:
 
     MAX_NEW = 64
     TEMPERATURE = 0.0  # deterministic
-    MAX_SEQ_LENGTH = 8192
 
     SHOW_SAMPLES = True
     SAMPLE_EVERY = 50
@@ -46,14 +48,8 @@ def evaluate_rl_model() -> Dict[str, float]:
 
     # ------------------------------------------------------------------ model loading
     print("Loading RL model...")
-    model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name=LORA_RL_DIR,
-        max_seq_length=MAX_SEQ_LENGTH,
-        dtype=None,
-        load_in_4bit=True,
-        device_map="balanced",
-    )
-    FastLanguageModel.for_inference(model)
+    model = AutoModelForCausalLM.from_pretrained(LORA_RL_DIR).to("cuda")
+    tokenizer = AutoTokenizer.from_pretrained(LORA_RL_DIR)
 
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
