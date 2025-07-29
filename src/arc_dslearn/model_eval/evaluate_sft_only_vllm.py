@@ -1,4 +1,4 @@
-"""Script for evaluating the SFT model only."""
+"""Script for evaluating the SFT model only using vLLM for fast batch inference."""
 
 from __future__ import annotations
 
@@ -11,17 +11,15 @@ from typing import Any, Dict, Tuple
 import matplotlib.pyplot as plt
 import pandas as pd
 import torch
-from transformers import (  # type: ignore
-    AutoModelForCausalLM,
-    AutoTokenizer,
-)
+from transformers import AutoTokenizer  # type: ignore
+from vllm import LLM, SamplingParams
 
 from src.arc_dslearn.metrics_and_rewards.reward_fn import equivalent, extract_python_code, safe_exec
 from src.arc_dslearn.utils import from_jsonable
 
 
-def evaluate_sft_model() -> Dict[str, float]:
-    """Evaluate SFT model with original DSL prompt."""
+def evaluate_sft_model_vllm() -> Dict[str, float]:
+    """Evaluate SFT model with original DSL prompt using vLLM for batch inference."""
     # ──────────────────────────── bookkeeping dicts ─────────────────────────
     tot_per_fun: Counter[str] = Counter()  # global frequency
     err_per_fun: Counter[str] = Counter()
@@ -46,9 +44,8 @@ def evaluate_sft_model() -> Dict[str, float]:
         ]
         return tokenizer.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
 
-    # ------------------------------------------------------------------ model loading
-    print("Loading SFT model...")
-    model = AutoModelForCausalLM.from_pretrained(LORA_SFT_DIR).to("cuda")
+    # ------------------------------------------------------------------ tokenizer loading
+    print("Loading tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained(LORA_SFT_DIR)
 
     if tokenizer.pad_token is None:
@@ -73,10 +70,24 @@ def evaluate_sft_model() -> Dict[str, float]:
             shots_py.append({"inputs": inp, "output": out})
         sample["shots_py"] = shots_py
 
+    # 1) Build all prompts first
+    print("Building prompts...")
     prompts = [build_prompt(sample, tokenizer) for sample in raw_eval]
 
     for sample in raw_eval:
         tot_per_fun[sample["name"]] += 1
+
+    # ------------------------------------------------------------------ vLLM model loading
+    print("Loading SFT model with vLLM...")
+    llm = LLM(
+        model=LORA_SFT_DIR,  # SFT checkpoint path
+        dtype="bfloat16",  # or "float16" if needed
+        tensor_parallel_size=torch.cuda.device_count(),
+        trust_remote_code=True,
+        gpu_memory_utilization=0.95,
+        # Add swap space if needed for large models
+        max_model_len=None,  # Let vLLM decide based on model config
+    )
 
     # ------------------------------------------------------------------ evaluation functions
     _module_cache: Dict[str, Any] = {}
@@ -108,38 +119,40 @@ def evaluate_sft_model() -> Dict[str, float]:
         solved = check_sample(sample, gen_text)
         return sample["name"], solved
 
-    # ------------------------------------------------------------------ evaluation loop
-    print("→ Evaluating SFT model (with DSL prompt)")
+    # ------------------------------------------------------------------ batch generation
+    print("→ Evaluating SFT model (with DSL prompt) using vLLM batch generation")
     start = time()
+
+    # 3) Batch-generate in one go
+    params = SamplingParams(
+        temperature=TEMPERATURE,
+        max_tokens=MAX_NEW,
+        use_beam_search=False,  # Since temperature=0.0, this is greedy
+        skip_special_tokens=True,
+    )
+
+    print(f"Generating {len(prompts)} completions...")
+    outputs = llm.generate(prompts, params)
+
+    # 4) Evaluate
+    print("Evaluating generated solutions...")
+    gen_texts = [o.outputs[0].text for o in outputs]
 
     ok = 0
     n = len(raw_eval)
-    for i, sample in enumerate(raw_eval):
-        prompt = prompts[i]
-        enc = tokenizer(
-            prompt,
-            return_tensors="pt",
-        ).to(model.device)
-        with torch.inference_mode():
-            gen = model.generate(
-                **enc,
-                max_new_tokens=MAX_NEW,
-                temperature=TEMPERATURE,
-                do_sample=False,
-                use_cache=True,
-            )
-        gen_text = tokenizer.decode(gen[0][enc.input_ids.shape[-1] :], skip_special_tokens=False)
+    for i, (sample, gen_text) in enumerate(zip(raw_eval, gen_texts, strict=False)):
         name, solved = check_sample_tagged(sample, gen_text)
         ok += int(solved)
         if not solved:
             err_per_fun[name] += 1
+
         if SHOW_SAMPLES and i % SAMPLE_EVERY == 0:
             print(f"\n— sample {i}…")
             print(gen_text)
             print(f"\nSolved: {solved}")
 
     accuracy = ok / n
-    results["sft"] = accuracy
+    results["sft_vllm"] = accuracy
     runtime = time() - start
 
     # ───────────────────── DSL function error summary ───────────────────────
@@ -171,34 +184,35 @@ def evaluate_sft_model() -> Dict[str, float]:
     ax = top10.sort_values("error_rate")["error_rate"].plot(
         kind="barh",
         figsize=(7, 4),
-        title="Top-10 DSL primitives by error-rate (SFT - DSL prompt)",
+        title="Top-10 DSL primitives by error-rate (SFT - DSL prompt - vLLM)",
     )
     ax.set_xlabel("error rate")
     ax.set_ylabel("DSL primitive")
     plt.tight_layout()
-    plt.savefig("chart_results/error_rate_sft_only.png")
+    plt.savefig("chart_results/error_rate_sft_only_vllm.png")
     plt.close()
 
     # ───────────────────── plot ❷ overall accuracy bar ───────────────────────
     acc_df = pd.Series(results).sort_values().to_frame("accuracy")
     ax = acc_df["accuracy"].plot(
-        kind="barh", figsize=(6, 3), title="SFT Model Accuracy on eval split (DSL prompt)"
+        kind="barh", figsize=(6, 3), title="SFT Model Accuracy on eval split (DSL prompt - vLLM)"
     )
     ax.set_xlabel("accuracy")
     ax.set_xlim(0, 1)
     plt.tight_layout()
-    plt.savefig("chart_results/sft_model_accuracy.png")
+    plt.savefig("chart_results/sft_model_accuracy_vllm.png")
     plt.close()
 
-    print("\nSFT Model Functional accuracy on eval split (DSL prompt):")
+    print("\nSFT Model Functional accuracy on eval split (DSL prompt - vLLM):")
     print(f"SFT: {accuracy * 100:5.1f} %")
     print(f"(processed {len(raw_eval)} tasks in {runtime / 60:.1f} min)")
+    print(f"Throughput: {len(raw_eval) / runtime:.1f} samples/sec")
     print("\nSaved plots:")
-    print(" • chart_results/sft_model_accuracy.png")
-    print(" • chart_results/error_rate_sft_only.png")
+    print(" • chart_results/sft_model_accuracy_vllm.png")
+    print(" • chart_results/error_rate_sft_only_vllm.png")
 
     return results
 
 
 if __name__ == "__main__":
-    evaluate_sft_model()
+    evaluate_sft_model_vllm()

@@ -142,6 +142,25 @@ def evaluate_rl_model() -> Dict[str, float]:
     results["rl"] = accuracy
     runtime = time() - start
 
+    # ───────────────────── DSL function error summary ───────────────────────
+    functions_with_multiple_errors = {
+        name: count for name, count in err_per_fun.items() if count > 0
+    }
+    if functions_with_multiple_errors:
+        print(f"\n📊 DSL Functions with >0 errors (total: {len(functions_with_multiple_errors)}):")
+        # Sort by error count descending
+        sorted_errors = sorted(
+            functions_with_multiple_errors.items(), key=lambda x: x[1], reverse=True
+        )
+        for func_name, error_count in sorted_errors:
+            total_occurrences = tot_per_fun[func_name]
+            error_rate = (error_count / total_occurrences) * 100
+            print(
+                f"  • {func_name}: {error_count} errors / {total_occurrences} total ({error_rate:.1f}%)"
+            )
+    else:
+        print("\n📊 No DSL functions have more than 0 errors!")
+
     # ───────────────────── plot ❶ error-rate per function ───────────────────────
     df_total = pd.DataFrame({"occ": pd.Series(tot_per_fun)})
     df = df_total.copy()

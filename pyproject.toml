@@ -18,6 +18,7 @@ dependencies = [
     "unsloth; sys_platform == 'linux'",
     "tf-keras; sys_platform == 'linux'",
     "deepspeed; sys_platform == 'linux'",
+    "vllm; sys_platform == 'linux'",
     "pandas",
     "matplotlib",
     "huggingface-hub",
