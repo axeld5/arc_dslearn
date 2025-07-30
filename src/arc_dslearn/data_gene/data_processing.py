@@ -138,6 +138,9 @@ def remove_answer_overlap(
 
     This identifies true ambiguity where multiple functions could be the correct answer.
 
+    Exception functions (vconcat, both, flip) are kept regardless of overlap criteria,
+    with a maximum of 10 blocks per exception function.
+
     Args:
     ----
         input_file: Path to the JSON file containing training blocks
@@ -167,6 +170,11 @@ def remove_answer_overlap(
     ambiguous_blocks = []
     unsolvable_blocks = []
     functions_affected = set()
+
+    # Track exceptions - functions that should be kept regardless of overlap
+    exception_functions = {"vconcat", "both", "flip"}
+    exception_blocks_kept = {func: 0 for func in exception_functions}
+    max_exception_blocks = 10
 
     filtered_data = []
 
@@ -199,8 +207,15 @@ def remove_answer_overlap(
 
         num_solutions = len(solving_functions)
 
-        # Check if this block meets our criteria
-        if min_solutions <= num_solutions <= max_solutions:
+        # Check if this is an exception function with remaining quota
+        if (
+            func_name in exception_functions
+            and exception_blocks_kept[func_name] < max_exception_blocks
+        ):
+            filtered_data.append(block)
+            exception_blocks_kept[func_name] += 1
+        # Check if this block meets our normal criteria
+        elif min_solutions <= num_solutions <= max_solutions:
             filtered_data.append(block)
         else:
             blocks_removed += 1
@@ -236,6 +251,9 @@ def remove_answer_overlap(
         "blocks_after": len(filtered_data),
         "criteria": f"{min_solutions}-{max_solutions} solutions for ALL shots",
         "dsl_functions_tested": len(dsl_functions),
+        "exception_functions": list(exception_functions),
+        "exception_blocks_kept": dict(exception_blocks_kept),
+        "total_exception_blocks": sum(exception_blocks_kept.values()),
         # Include details for debugging (limited to prevent huge output)
         "ambiguous_examples": ambiguous_blocks[:5],
         "unsolvable_examples": unsolvable_blocks[:5],
@@ -248,6 +266,15 @@ def remove_answer_overlap(
     print(
         f"✓ Found {len(unsolvable_blocks)} unsolvable blocks (no DSL function can solve ALL shots)"
     )
+
+    # Print exception handling info
+    total_exception_blocks = sum(exception_blocks_kept.values())
+    if total_exception_blocks > 0:
+        print(f"✓ Exception functions kept {total_exception_blocks} blocks:")
+        for func, count in exception_blocks_kept.items():
+            if count > 0:
+                print(f"  - {func}: {count}/{max_exception_blocks} blocks kept")
+
     print(f"✓ Blocks: {len(data)} → {len(filtered_data)}")
     print(f"✓ Functions affected: {len(functions_affected)}")
     if functions_affected:
