@@ -17,7 +17,7 @@ from transformers import (  # type: ignore
 )
 
 if __name__ == "__main__":
-    MODEL_NAME = "Qwen/Qwen2.5-Coder-1.5B"  # base (not –Instruct)
+    MODEL_NAME = "Qwen/Qwen2.5-Coder-1.5B-Instruct"  # Instruct
     DATA_FILE = "train_split.json"  # produced by your script
     MAX_LEN = 8192  # stay well below 32 k context
 
@@ -33,10 +33,6 @@ if __name__ == "__main__":
     # Add padding token if not present
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
-        tokenizer.pad_token_id = tokenizer.eos_token_id
-
-    # Ensure the tokenizer configuration is properly set
-    tokenizer.padding_side = "left"  # For generation tasks
 
     attn_impl = "flash_attention_2" if platform.system() == "Linux" else "eager"
 
