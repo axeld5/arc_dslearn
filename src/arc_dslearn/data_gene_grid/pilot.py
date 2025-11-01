@@ -12,9 +12,23 @@ from src.arc_dslearn.data_gene_grid.data_processing import (
 )
 
 
-def main_generate_blocks(n: int = 200, seed: int = 1337):
+def main_generate_blocks(n: int = 200, max_lines: int = 5, seed: int = 1337):
     """Generate n multi-line Grid->Grid blocks using make_multiline_block."""
-    blocks = [make_multiline_block(max_lines=5, seed=seed + i, n_shots=3) for i in range(n)]
+    blocks = []
+    failed_count = 0
+
+    for i in range(n):
+        try:
+            block = make_multiline_block(max_lines=max_lines, seed=seed + i, n_shots=3)
+            blocks.append(block)
+            if (i + 1) % 20 == 0:
+                print(f"  Generated {i + 1}/{n} blocks (failed: {failed_count})")
+        except Exception as e:
+            failed_count += 1
+            print(f"  Warning: Failed to generate block {i + 1} (seed={seed + i}): {e}")
+            continue
+
+    print(f"  Successfully generated {len(blocks)}/{n} blocks (failed: {failed_count})")
     return blocks
 
 
@@ -23,6 +37,11 @@ def run_pipeline():
     # Step 1: Generate multi-line Grid→Grid training data
     print("Step 1: Generating multi-line Grid→Grid training data...")
     training_blocks = main_generate_blocks()
+
+    if not training_blocks:
+        print("✗ Error: No training blocks were generated successfully. Exiting.")
+        return
+
     with open("train_set.json", "w") as fp:
         json.dump(training_blocks, fp, indent=2)
     print(f"✓ Wrote train_set.json with {len(training_blocks)} examples")

@@ -39,17 +39,17 @@ def parse_tuple(data):
     return data
 
 
-def parse_io_data(json_str):
-    """Parse JSON string containing I/O data."""
-    try:
-        data = json.loads(json_str)
-        if "I" in data:
-            return parse_tuple(data["I"])
-        elif "__tuple__" in data:
-            return parse_tuple(data)
-        return None
-    except Exception:
-        return None
+def parse_io_data(obj):
+    """Parse data for a grid (already a dict/list extracted from JSON)."""
+    # Accepts either the full shot or a value with __tuple__ directly
+    if isinstance(obj, dict):
+        # Prefer __tuple__-style grid
+        if "__tuple__" in obj:
+            return parse_tuple(obj)
+        # Accept legacy key
+        elif "I" in obj:
+            return parse_tuple(obj["I"])
+    return obj
 
 
 def plot_grid(ax, grid, title):
@@ -120,8 +120,12 @@ def visualize_all_shots(task):
 
     # Create a figure for each shot
     for idx, shot in enumerate(shots):
-        input_grid = parse_io_data(shot["inputs"])
-        output_grid = parse_io_data(shot["output"])
+        input_grid = (
+            parse_io_data(shot["inputs"]["I"])
+            if "inputs" in shot and "I" in shot["inputs"]
+            else None
+        )
+        output_grid = parse_io_data(shot["output"]) if "output" in shot else None
 
         _ = visualize_example(task_name, idx, input_grid, output_grid)
         plt.show()

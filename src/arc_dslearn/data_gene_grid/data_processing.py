@@ -218,16 +218,11 @@ def remove_answer_overlap(
         elif min_solutions <= num_solutions <= max_solutions:
             filtered_data.append(block)
         else:
-            blocks_removed += 1
-            functions_affected.add(func_name)
-
             if num_solutions == 0:
-                unsolvable_blocks.append({
-                    "function": func_name,
-                    "shots": shots_data[:3],  # Include first 3 shots for debugging
-                    "solving_functions": solving_functions,
-                })
+                continue
             else:
+                blocks_removed += 1
+                functions_affected.add(func_name)
                 ambiguous_blocks.append({
                     "function": func_name,
                     "shots": shots_data[:3],  # Include first 3 shots for debugging
