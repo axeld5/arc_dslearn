@@ -173,7 +173,7 @@ def remove_answer_overlap(
 
     # Track exceptions - functions that should be kept regardless of overlap
     exception_functions = {"vconcat", "both", "flip", "positive"}
-    exception_blocks_kept = {func: 0 for func in exception_functions}
+    exception_blocks_kept = dict.fromkeys(exception_functions, 0)
     max_exception_blocks = 10
 
     filtered_data = []

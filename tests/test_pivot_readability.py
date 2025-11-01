@@ -12,7 +12,7 @@ import tempfile
 # Add the parent directory to the path so we can import arc_dslearn
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.arc_dslearn.data_gene.pilot import main
+from src.arc_dslearn.data_gene_unary.pilot import main
 
 
 def test_data_generation():

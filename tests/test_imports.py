@@ -55,7 +55,7 @@ def test_core_modules_importable():
     assert hasattr(dsl, "__name__"), "DSL module should be importable"
 
     # Test that data generation modules import
-    import src.arc_dslearn.data_gene.pilot as pilot
+    import src.arc_dslearn.data_gene_unary.pilot as pilot
 
     assert hasattr(pilot, "main"), "Pilot module should have main function"
 

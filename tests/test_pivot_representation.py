@@ -12,8 +12,8 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import src.arc_dslearn.arc_dsl.dsl as dsl
-from src.arc_dslearn.data_gene.block_generation import should_skip_function
-from src.arc_dslearn.data_gene.pilot import main
+from src.arc_dslearn.data_gene_unary.block_generation import should_skip_function
+from src.arc_dslearn.data_gene_unary.pilot import main
 
 
 def test_dsl_functions_available():
