@@ -219,7 +219,14 @@ def remove_answer_overlap(
             filtered_data.append(block)
         else:
             if num_solutions == 0:
-                continue
+                # Keep unsolvable blocks in the dataset (don't filter them out)
+                unsolvable_blocks.append({
+                    "function": func_name,
+                    "shots": shots_data[:3],  # Include first 3 shots for debugging
+                    "solving_functions": solving_functions,
+                    "num_solutions": num_solutions,
+                })
+                filtered_data.append(block)
             else:
                 blocks_removed += 1
                 functions_affected.add(func_name)
@@ -254,7 +261,7 @@ def remove_answer_overlap(
         "unsolvable_examples": unsolvable_blocks[:5],
     }
 
-    print(f"✓ Removed {blocks_removed}/{total_blocks} blocks with ambiguous or unsolvable patterns")
+    print(f"✓ Removed {blocks_removed}/{total_blocks} blocks with ambiguous patterns")
     print(
         f"✓ Found {len(ambiguous_blocks)} ambiguous blocks (multiple DSL functions can solve ALL shots)"
     )
