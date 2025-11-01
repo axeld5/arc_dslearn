@@ -25,6 +25,8 @@ jobs:
         enable-cache: true
     - name: Install dependencies
       run: |
+        # Install only dev dependencies (no GPU/CUDA packages needed for CI)
+        # For training with GPU dependencies, use: uv pip install -e .[dev,gpu]
         uv pip install --system -e .[dev]
     - name: Lint & format
       run: ruff check --output-format github --exclude 'src/arc_dslearn/arc_dsl' .

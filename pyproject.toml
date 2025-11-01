@@ -11,14 +11,6 @@ dependencies = [
     "datasets",
     "transformers",
     "tiktoken",
-    "peft; sys_platform == 'linux'",
-    "bitsandbytes; sys_platform == 'linux'",
-    "accelerate; sys_platform == 'linux'",
-    "trl; sys_platform == 'linux'",
-    "unsloth; sys_platform == 'linux'",
-    "tf-keras; sys_platform == 'linux'",
-    "deepspeed; sys_platform == 'linux'",
-    "vllm; sys_platform == 'linux'",
     "pandas",
     "matplotlib",
     "huggingface-hub",
@@ -32,6 +24,18 @@ dev = [
     "hypothesis~=6.104",  # property-based tests for DSL functions
     "mypy~=1.10",
     "pre-commit~=3.7"
+]
+
+# GPU/CUDA-dependent packages for training on Linux
+gpu = [
+    "peft",
+    "bitsandbytes",
+    "accelerate",
+    "trl",
+    "unsloth",
+    "tf-keras",
+    "deepspeed",
+    "vllm"
 ]
 
 [build-system]
