@@ -15,7 +15,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.arc_dslearn.data_gene_unary.pilot import main
 
 
-def test_data_generation():
+def test_data_generation() -> None:
     """Test that we can generate training blocks."""
     training_blocks = main(generation_seed=42)
 
@@ -26,7 +26,7 @@ def test_data_generation():
     ), "All blocks should be dictionaries"
 
 
-def test_dataset_structure():
+def test_dataset_structure() -> None:
     """Test that dataset entries have expected structure."""
     training_blocks = main(generation_seed=42)
 
@@ -41,7 +41,7 @@ def test_dataset_structure():
         assert "assistant_prompt" in sample_block, "Block should have 'assistant_prompt' field"
 
 
-def test_huggingface_dataset_loading():
+def test_huggingface_dataset_loading() -> None:
     """Test that generated data can be loaded as HuggingFace datasets."""
     try:
         from datasets import load_dataset

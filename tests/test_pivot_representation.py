@@ -16,7 +16,7 @@ from src.arc_dslearn.data_gene_unary.block_generation import should_skip_functio
 from src.arc_dslearn.data_gene_unary.pilot import main
 
 
-def test_dsl_functions_available():
+def test_dsl_functions_available() -> None:
     """Test that DSL functions are available and filterable."""
     all_dsl_functions = [
         name
@@ -34,7 +34,7 @@ def test_dsl_functions_available():
     assert len(expected_functions) > 0, "Should have some non-skipped DSL functions"
 
 
-def test_function_coverage_in_generated_blocks():
+def test_function_coverage_in_generated_blocks() -> None:
     """Test DSL function coverage in generated blocks."""
     training_blocks = main(generation_seed=42)
     assert len(training_blocks) > 0, "Should generate training blocks"
@@ -63,7 +63,7 @@ def test_function_coverage_in_generated_blocks():
     ), f"Expected >80% function coverage, got {coverage_ratio:.1%} ({len(represented_functions)}/{len(expected_functions)})"
 
 
-def test_valid_code_contexts():
+def test_valid_code_contexts() -> None:
     """Test that represented functions appear in valid contexts."""
     training_blocks = main(generation_seed=42)
     assert len(training_blocks) > 0, "Should generate training blocks"

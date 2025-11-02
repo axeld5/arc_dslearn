@@ -12,7 +12,7 @@ from src.arc_dslearn.data_gene_grid.data_processing import (
 )
 
 
-def main_generate_blocks(n: int = 200, max_lines: int = 5, seed: int = 1337):
+def main_generate_blocks(n: int = 60, max_lines: int = 5, seed: int = 1337):
     """Generate n multi-line Grid->Grid blocks using make_multiline_block."""
     blocks = []
     failed_count = 0

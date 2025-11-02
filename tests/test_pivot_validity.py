@@ -15,7 +15,7 @@ from src.arc_dslearn.data_gene_unary.pilot import main
 from src.arc_dslearn.metrics_and_rewards.reward_fn import reward_function
 
 
-def test_generated_blocks_structure():
+def test_generated_blocks_structure() -> None:
     """Test that generated blocks have valid I/O structure."""
     training_blocks = main(generation_seed=42)
     assert len(training_blocks) > 0, "Should generate training blocks"
@@ -30,7 +30,7 @@ def test_generated_blocks_structure():
     assert "assistant_prompt" in sample_block, "Block should have 'assistant_prompt' field"
 
 
-def test_reward_function_compatibility():
+def test_reward_function_compatibility() -> None:
     """Test reward function can process generated data."""
     training_blocks = main(generation_seed=42)
     assert len(training_blocks) > 0, "Need training blocks to test"
@@ -42,17 +42,20 @@ def test_reward_function_compatibility():
     # Format shots for reward function
     shots = []
     for block in sample_blocks:
-        shot = [
-            {
-                "inputs": json.dumps(block["shots"][0]["inputs"])
-                if isinstance(block.get("shots")[0].get("inputs"), dict)
-                else str(block.get("shots")[0].get("inputs", "{}")),
-                "output": json.dumps(block["shots"][0]["output"])
-                if isinstance(block.get("shots")[0].get("output"), dict)
-                else str(block.get("shots")[0].get("output", "{}")),
-            }
-        ]
-        shots.append(shot)
+        block_shots = block.get("shots")
+        if block_shots and len(block_shots) > 0:
+            first_shot = block_shots[0]
+            shot = [
+                {
+                    "inputs": json.dumps(first_shot["inputs"])
+                    if isinstance(first_shot.get("inputs"), dict)
+                    else str(first_shot.get("inputs", "{}")),
+                    "output": json.dumps(first_shot["output"])
+                    if isinstance(first_shot.get("output"), dict)
+                    else str(first_shot.get("output", "{}")),
+                }
+            ]
+            shots.append(shot)
 
     # Test that reward function runs without errors
     rewards = reward_function(completions, shots)
@@ -62,7 +65,7 @@ def test_reward_function_compatibility():
     assert all(isinstance(r, (int, float)) for r in rewards), "All rewards should be numeric"
 
 
-def test_positive_rewards_achievable():
+def test_positive_rewards_achievable() -> None:
     """Test that some generated code achieves positive rewards."""
     training_blocks = main(generation_seed=42)
     assert len(training_blocks) > 0, "Need training blocks to test"
@@ -73,17 +76,20 @@ def test_positive_rewards_achievable():
 
     shots = []
     for block in sample_blocks:
-        shot = [
-            {
-                "inputs": json.dumps(block["shots"][0]["inputs"])
-                if isinstance(block.get("shots")[0].get("inputs"), dict)
-                else str(block.get("shots")[0].get("inputs", "{}")),
-                "output": json.dumps(block["shots"][0]["output"])
-                if isinstance(block.get("shots")[0].get("output"), dict)
-                else str(block.get("shots")[0].get("output", "{}")),
-            }
-        ]
-        shots.append(shot)
+        block_shots = block.get("shots")
+        if block_shots and len(block_shots) > 0:
+            first_shot = block_shots[0]
+            shot = [
+                {
+                    "inputs": json.dumps(first_shot["inputs"])
+                    if isinstance(first_shot.get("inputs"), dict)
+                    else str(first_shot.get("inputs", "{}")),
+                    "output": json.dumps(first_shot["output"])
+                    if isinstance(first_shot.get("output"), dict)
+                    else str(first_shot.get("output", "{}")),
+                }
+            ]
+            shots.append(shot)
 
     rewards = reward_function(completions, shots)
 

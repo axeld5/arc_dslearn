@@ -13,12 +13,12 @@ from contextlib import redirect_stderr, redirect_stdout
 import src.arc_dslearn as arc_dslearn
 
 
-def test_main_module_importable():
+def test_main_module_importable() -> None:
     """Test that the main arc_dslearn module can be imported."""
     assert hasattr(arc_dslearn, "__file__"), "arc_dslearn module should have __file__ attribute"
 
 
-def test_all_submodules_importable():
+def test_all_submodules_importable() -> None:
     """Test that all submodules can be imported."""
     root = pathlib.Path(arc_dslearn.__file__).parent
 
@@ -68,7 +68,7 @@ def test_all_submodules_importable():
     ), f"Successfully imported {successful_imports}/{expected_successful} modules (skipped {skipped_imports} GPU-dependent)"
 
 
-def test_core_modules_importable():
+def test_core_modules_importable() -> None:
     """Test specific core modules can be imported."""
     # Test that core DSL module imports
     import src.arc_dslearn.arc_dsl.dsl as dsl
@@ -86,7 +86,7 @@ def test_core_modules_importable():
     assert hasattr(reward_fn, "reward_function"), "Reward module should have reward_function"
 
 
-def test_import_side_effects():
+def test_import_side_effects() -> None:
     """Test that imports don't cause excessive unwanted side effects."""
     # Capture any output during import
     stdout_capture = io.StringIO()
@@ -116,7 +116,7 @@ def test_import_side_effects():
     assert True, "Import side effects test completed"
 
 
-def test_all_modules_importable_legacy():
+def test_all_modules_importable_legacy() -> None:
     """Legacy test function that mimics the original behavior."""
     root = pathlib.Path(arc_dslearn.__file__).parent
 

@@ -1,4 +1,4 @@
-"""Block generation logic for DSL function training data (refactored, fast sampler)."""
+"""Block generation logic for DSL function training data (multi-arg vars + cleanup + fallback)."""
 
 from __future__ import annotations
 
@@ -233,14 +233,20 @@ def should_skip_function(func: Callable[..., Any]) -> bool:
 
 
 @dataclass(frozen=True)
+class _ParamSpec:
+    name: str
+    anno: Any
+    required: bool  # True if no default
+
+
+@dataclass(frozen=True)
 class _FnMeta:
     name: str
     func: Callable[..., Any]
-    param_annos: list[Any]  # annotations per positional-or-keyword param
-    flow_positions: tuple[
-        int, ...
-    ]  # indices whose annotation accepts Grid (possible "wire-through")
-    produces_grid: bool  # return type can be Grid
+    params: tuple[_ParamSpec, ...]  # ordered positional-or-kw params
+    flow_positions: tuple[int, ...]  # indices whose annotation accepts Grid
+    produces_grid: bool
+    return_atoms: frozenset[str]  # expanded atoms of return type
 
 
 def _collect_fn_meta() -> list[_FnMeta]:
@@ -249,23 +255,29 @@ def _collect_fn_meta() -> list[_FnMeta]:
         if should_skip_function(func):
             continue
         sig = inspect.signature(func)
-        params = [
+        raw_params = [
             p for p in sig.parameters.values() if p.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
         ]
-        if not params:
+        if not raw_params:
             continue
         # All params must have annotations for us to reason about them
-        if any(p.annotation is inspect._empty for p in params):
+        if any(p.annotation is inspect._empty for p in raw_params):
             continue
         ret = sig.return_annotation
         if ret is inspect._empty:
             continue
 
-        annos = [p.annotation for p in params]
-        flow_idxs = tuple(i for i, a in enumerate(annos) if _accepts_grid(a))
-        produces = _produces_grid(ret)
+        params: list[_ParamSpec] = []
+        for p in raw_params:
+            params.append(
+                _ParamSpec(
+                    name=p.name,
+                    anno=p.annotation,
+                    required=(p.default is inspect._empty),
+                )
+            )
 
-        # Discard functions that have no place to wire the flowing Grid
+        flow_idxs = tuple(i for i, sp in enumerate(params) if _accepts_grid(sp.anno))
         if not flow_idxs:
             continue
 
@@ -273,9 +285,10 @@ def _collect_fn_meta() -> list[_FnMeta]:
             _FnMeta(
                 name=name,
                 func=func,
-                param_annos=annos,
+                params=tuple(params),
                 flow_positions=flow_idxs,
-                produces_grid=produces,
+                produces_grid=_produces_grid(ret),
+                return_atoms=_expand_atoms_cached(ret),
             )
         )
     return metas
@@ -284,7 +297,51 @@ def _collect_fn_meta() -> list[_FnMeta]:
 _FN_META: list[_FnMeta] = _collect_fn_meta()
 _ALL_IDX: list[int] = list(range(len(_FN_META)))
 
-# ---------- Random path sampling (fast) ----------
+# ---------- Random path sampling (multi-arg) ----------
+
+
+@dataclass(frozen=True)
+class _Var:
+    name: str
+    atoms: frozenset[str]
+
+
+@dataclass(frozen=True)
+class _ParamSrc:
+    # Exactly one of (var_name) or (const_name,const_val) is set, unless 'omit' is True
+    var_name: str | None
+    const_name: str | None
+    const_val: Any | None
+    omit: bool = False  # True => don't pass this parameter at all
+
+
+def _render_call(meta: _FnMeta, srcs: tuple[_ParamSrc, ...]) -> str:
+    """Render a python call, using keywords if any parameter is omitted or any earlier param is omitted."""
+    # If we omit any param that's not at the end, we must use keywords for *all* that we pass.
+    any_omitted = any(s.omit for s in srcs)
+    # If using keywords, pass ONLY the non-omitted ones as name=value in declared order.
+    if any_omitted:
+        parts = []
+        for spec, s in zip(meta.params, srcs, strict=False):
+            if s.omit:
+                continue
+            val = s.var_name if s.var_name is not None else s.const_name
+            parts.append(f"{spec.name}={val}")
+        return f"{meta.name}({', '.join(parts)})"
+    else:
+        # positional-only prefix
+        parts = []
+        for s in srcs:
+            val = s.var_name if s.var_name is not None else s.const_name
+            parts.append(val)
+        return f"{meta.name}({', '.join(parts)})"
+
+
+@dataclass(frozen=True)
+class _StepPlan:
+    idx: int  # index into _FN_META
+    out_var: str  # variable defined by this step (e.g., "x3")
+    param_srcs: tuple[_ParamSrc, ...]  # one per passed positional parameter (var or const)
 
 
 def _biased_length(rng, min_len: int, max_len: int) -> int:
@@ -295,95 +352,216 @@ def _biased_length(rng, min_len: int, max_len: int) -> int:
 
 
 @dataclass(frozen=True)
-class _StepPlan:
-    idx: int  # index into _FN_META
-    flow_pos: int  # which param receives the previous Grid
-    const_names: tuple[str, ...]  # length == num params; "" marks the flow position
-    const_vals: tuple[Any, ...]  # same length; None marks the flow position
+class _Binding:
+    # What the code will show:
+    src: _ParamSrc
+    # What we used in the dry-run to validate the step:
+    value: Any
 
 
-def _try_make_step_plan(meta: _FnMeta, rng) -> _StepPlan | None:
-    """Choose a flow position and fill other params with constants. Fail fast if impossible."""
-    # Choose a random flow position among the acceptable ones
-    flow_pos = rng.choice(meta.flow_positions)
-    const_names: list[str] = []
-    const_vals: list[Any] = []
+def _try_bind_and_run(
+    meta: _FnMeta,
+    env_vals: dict[str, Any],
+    rng,
+    max_trials: int = 32,
+) -> tuple[tuple[_ParamSrc, ...], Any] | None:
+    """Try to build a valid call to `meta.func` using current env (I, x1, ...), constants, and optional param omission. Execute it; on success return (param_srcs_for_rendering, return_value)."""
+    params = meta.params
 
-    for i, anno in enumerate(meta.param_annos):
-        if i == flow_pos:
-            const_names.append("")  # placeholder, will be replaced with prev var
-            const_vals.append(None)
+    # Precompute candidate sources per parameter (variables + constants + "omit" for optionals)
+    cand_lists: list[list[_Binding]] = []
+    var_names = list(env_vals.keys())  # e.g., ["I", "x1", "x2", ...]
+
+    for sp in params:
+        cands: list[_Binding] = []
+
+        # variables: any previously produced value
+        for vn in var_names:
+            cands.append(
+                _Binding(
+                    src=_ParamSrc(var_name=vn, const_name=None, const_val=None), value=env_vals[vn]
+                )
+            )
+
+        # constants: only if we have a matching name/value (we don't type-check here;
+        # correctness will be validated by actually calling the function)
+        for atom_list in _CONST_BY_ATOM.values():
+            for cname, cval in atom_list:
+                cands.append(
+                    _Binding(
+                        src=_ParamSrc(var_name=None, const_name=cname, const_val=cval), value=cval
+                    )
+                )
+
+        # omission for optionals
+        if not sp.required:
+            cands.append(
+                _Binding(
+                    src=_ParamSrc(var_name=None, const_name=None, const_val=None, omit=True),
+                    value=None,
+                )
+            )
+
+        cand_lists.append(cands)
+
+    # Try randomized attempts
+    for _ in range(max_trials):
+        # Heuristic: bias toward variables to keep the graph connected
+        picks: list[_Binding] = []
+        used_var = False
+        for cands in cand_lists:
+            # prefer vars 60% if available
+            var_cands = [b for b in cands if b.src.var_name is not None]
+            b = rng.choice(var_cands) if var_cands and rng.random() < 0.6 else rng.choice(cands)
+            if b.src.var_name is not None:
+                used_var = True
+            picks.append(b)
+
+        # Make sure required params are not omitted
+        for b, sp in zip(picks, params, strict=False):
+            if sp.required and b.src.omit:
+                # resample that slot to non-omit if possible
+                non_omit = [
+                    c
+                    for c in cand_lists[len(picks) - len(params) + params.index(sp)]
+                    if not c.src.omit
+                ]
+                b = rng.choice(non_omit) if non_omit else None
+                if b is None:
+                    break
+
+        if any(b is None for b in picks):
             continue
-        picked = _pick_constant_for_annotation(anno, rng)
-        if picked is None:
-            # Cannot satisfy parameter with our constants; give up on this meta for now
-            return None
-        cname, cval = picked
-        const_names.append(cname)
-        const_vals.append(cval)
 
-    return _StepPlan(
-        idx=_FN_META.index(meta),
-        flow_pos=flow_pos,
-        const_names=tuple(const_names),
-        const_vals=tuple(const_vals),
-    )
+        # Ensure at least one variable is used (connectivity)
+        if not used_var and any(b.src.var_name is not None for cl in cand_lists for b in cl):
+            # force one slot to be a var if possible
+            var_slots = [
+                i
+                for i, cl in enumerate(cand_lists)
+                if any(bb.src.var_name is not None for bb in cl)
+            ]
+            if var_slots:
+                i = rng.choice(var_slots)
+                var_choices = [bb for bb in cand_lists[i] if bb.src.var_name is not None]
+                if var_choices:
+                    picks[i] = rng.choice(var_choices)
+
+        # Decide whether to render as keywords (if any omit in the middle)
+        any_omit = any(b.src.omit for b in picks)
+        # Build args for execution
+        if any_omit:
+            # keyword call: only non-omitted as name=value
+            kwargs = {}
+            try:
+                for sp, b in zip(params, picks, strict=False):
+                    if b.src.omit:
+                        continue
+                    kwargs[sp.name] = b.value
+                ret = meta.func(**kwargs)
+                param_srcs = tuple(b.src for b in picks)
+                return param_srcs, ret
+            except Exception:
+                continue
+        else:
+            # positional call
+            args = [b.value for b in picks]
+            try:
+                ret = meta.func(*args)
+                param_srcs = tuple(b.src for b in picks)
+                return param_srcs, ret
+            except Exception:
+                continue
+
+    return None
 
 
 def _sample_path_plans(
     rng,
     max_len: int,
     min_len: int = 3,
-    path_budget: int = 512,
-    middle_pool_size: int = 64,
+    path_budget: int = 128,
+    middle_pool_size: int = 64,  # unused; kept for signature compatibility
 ) -> list[list[_StepPlan]]:
-    """Sample path plans (with constants chosen) whose LAST function can return a Grid."""
-    if not _ALL_IDX:
-        return []
-
+    """Build plans by *executing steps during sampling* on a single dry-run input. The last chosen function must return a Grid (verified by return typing OR by runtime check)."""
     paths: list[list[_StepPlan]] = []
-    seen: set[tuple[int, ...]] = set()
+    if not _FN_META:
+        return paths
 
     for _ in range(path_budget):
+        # fresh dry-run environment
+        dry_env: dict[str, Any] = {}
+        dry_env["I"] = rand_grid()
+
+        # choose target length
         L = _biased_length(rng, min_len=min_len, max_len=max_len)
-
-        # pick last from metas that can produce a Grid
-        enders = [i for i in _ALL_IDX if _FN_META[i].produces_grid]
-        if not enders:
-            break
-        last_idx = rng.choice(enders)
-
-        # pick first + middles from anywhere; avoid trivial repeats
-        pool = [i for i in _ALL_IDX if i != last_idx]
-        if not pool:
-            continue
-        if len(pool) > middle_pool_size:
-            rng.shuffle(pool)
-            pool = pool[:middle_pool_size]
-        rng.shuffle(pool)
-
-        # choose L-1 items for first..middle, then append last
-        pre = pool[: max(L - 1, 1)]
-        idxs = pre + [last_idx]
-        key = tuple(id(_FN_META[i].func) for i in idxs)
-        if key in seen:
-            continue
-        seen.add(key)
-
-        # Build a concrete plan (flow position + constants for each step)
         plan: list[_StepPlan] = []
+
+        # step 1..L-1: any function that we can run successfully
         ok = True
-        for i in idxs:
-            meta = _FN_META[i]
-            step = _try_make_step_plan(meta, rng)
-            if step is None:
+        for step_no in range(1, L):
+            # try a bounded number of metas to avoid O(n*m) blowup
+            metas_order = list(range(len(_FN_META)))
+            rng.shuffle(metas_order)
+
+            picked: tuple[int, tuple[_ParamSrc, ...], Any] | None = None
+            for mi in metas_order:
+                meta = _FN_META[mi]
+                # try to bind and run
+                res = _try_bind_and_run(meta, dry_env, rng)
+                if res is None:
+                    continue
+                param_srcs, ret = res
+                picked = (mi, param_srcs, ret)
+                break
+
+            if picked is None:
                 ok = False
                 break
-            plan.append(step)
+
+            mi, param_srcs, ret_val = picked
+            out_name = f"x{step_no}"
+            plan.append(_StepPlan(idx=mi, out_var=out_name, param_srcs=param_srcs))
+            dry_env[out_name] = ret_val
+
         if not ok:
             continue
 
-        # avoid all-same-function-name paths (dull)
+        # final step: must return Grid. Prefer metas annotated as producing Grid; but accept
+        # runtime-validated returns that are structurally a Grid (tuple-of-tuples-of-ints).
+        metas_order = [i for i, m in enumerate(_FN_META) if m.produces_grid] or list(
+            range(len(_FN_META))
+        )
+        rng.shuffle(metas_order)
+
+        picked_last: tuple[int, tuple[_ParamSrc, ...], Any] | None = None
+        for mi in metas_order:
+            meta = _FN_META[mi]
+            res = _try_bind_and_run(meta, dry_env, rng)
+            if res is None:
+                continue
+            param_srcs, ret = res
+
+            # Check runtime return looks like Grid if meta isn't annotated as such
+            if (
+                not meta.produces_grid
+                and not _is_grid_structural(type(ret))
+                and not (isinstance(ret, tuple) and ret and all(isinstance(r, tuple) for r in ret))
+            ):
+                continue
+
+            picked_last = (mi, param_srcs, ret)
+            break
+
+        if picked_last is None:
+            continue
+
+        mi, param_srcs, ret_val = picked_last
+        out_name = f"x{L}"
+        plan.append(_StepPlan(idx=mi, out_var=out_name, param_srcs=param_srcs))
+        dry_env[out_name] = ret_val
+
+        # avoid all-same-function paths
         names = {_FN_META[s.idx].name for s in plan}
         if len(names) == 1:
             continue
@@ -391,6 +569,96 @@ def _sample_path_plans(
         paths.append(plan)
 
     return paths
+
+
+# ---------- Plan cleanup: dead-code elimination + renumber ----------
+
+
+def _live_vars(plan: list[_StepPlan]) -> set[str]:
+    """Compute variables that are needed to obtain the final output (the last step's out_var)."""
+    needed: set[str] = set()
+    if not plan:
+        return needed
+    needed.add(plan[-1].out_var)
+    for step in reversed(plan):
+        if step.out_var in needed:
+            for src in step.param_srcs:
+                if src.var_name is not None:
+                    needed.add(src.var_name)
+    # Keep input I only if referenced later
+    if "I" in needed:
+        return needed
+    # Add I if any step references I directly
+    for step in plan:
+        for src in step.param_srcs:
+            if src.var_name == "I":
+                needed.add("I")
+                break
+    return needed
+
+
+def _prune_and_relabel(plan: list[_StepPlan]) -> list[_StepPlan]:
+    """Remove steps whose outputs are unused and relabel xk consecutively; update all references."""
+    if not plan:
+        return plan
+
+    needed = _live_vars(plan)
+
+    # Filter to only live steps (those whose out_var is needed)
+    live_steps = [s for s in plan if s.out_var in needed]
+    if not live_steps:
+        return plan  # should not happen, but keep original just in case
+
+    # Build renaming map for xk, in order of appearance
+    new_names: dict[str, str] = {}
+    next_idx = 1
+    for s in live_steps:
+        old = s.out_var
+        if old not in new_names:
+            new_names[old] = f"x{next_idx}"
+            next_idx += 1
+
+    # Rewrite steps with new names and updated parameter references
+    rewritten: list[_StepPlan] = []
+    for s in live_steps:
+        new_out = new_names[s.out_var]
+        new_params: list[_ParamSrc] = []
+        for p in s.param_srcs:
+            if p.var_name is not None:
+                nn = "I" if p.var_name == "I" else new_names.get(p.var_name, p.var_name)
+                new_params.append(_ParamSrc(var_name=nn, const_name=None, const_val=None))
+            else:
+                new_params.append(p)
+        rewritten.append(_StepPlan(idx=s.idx, out_var=new_out, param_srcs=tuple(new_params)))
+
+    return rewritten
+
+
+# ---------- Legacy single-flow fallback (ensures progress) ----------
+
+
+def _legacy_try_make_step_plan(meta: _FnMeta, rng) -> _StepPlan | None:
+    """Legacy: choose one flow position (Grid) and fill the rest with constants only, over the required positional prefix."""
+    grid_positions = [i for i, sp in enumerate(meta.params) if _accepts_grid(sp.anno)]
+    if not grid_positions:
+        return None
+    flow_pos = rng.choice(grid_positions)
+
+    last_required = max((i for i, sp in enumerate(meta.params) if sp.required), default=-1)
+    upto = max(last_required, flow_pos)  # must include the flow pos too
+
+    param_srcs: list[_ParamSrc] = []
+    for i, sp in enumerate(meta.params[: upto + 1]):
+        if i == flow_pos:
+            param_srcs.append(_ParamSrc(var_name="I", const_name=None, const_val=None))
+        else:
+            picked = _pick_constant_for_annotation(sp.anno, rng)
+            if picked is None:
+                return None
+            cname, cval = picked
+            param_srcs.append(_ParamSrc(var_name=None, const_name=cname, const_val=cval))
+
+    return _StepPlan(idx=_FN_META.index(meta), out_var="x1", param_srcs=tuple(param_srcs))
 
 
 # ---------- Block builder ----------
@@ -402,54 +670,51 @@ def make_multiline_block(
     n_shots: int = 3,
     max_path_retries: int = 10,
     max_shot_retries: int = 50,
+    path_budget: int = 128,
 ) -> dict[str, Any]:
-    """Compose a chain of 2..max_lines DSL functions (multi-arg allowed) with Grid input and Grid output. Only the last function must be able to produce a Grid. Non-flow params are filled from DSL constants."""
+    """Compose a chain of 2..max_lines DSL functions with Grid input and Grid output.
+
+    Each function may take multiple arguments from: prior variables (I, x1, x2, ...)
+    and/or DSL constants. At least one argument per step is a prior variable. The last
+    function returns a Grid. After sampling, unused temps are removed and xN are renumbered.
+    """
     rng = __import__("random").Random(seed)
 
-    # 1) Sample candidate path plans (with constants chosen per param)
+    # 1) Sample candidate path plans
     plans = _sample_path_plans(
         rng,
         max_len=max_lines,
         min_len=3,
-        path_budget=1024,
+        path_budget=path_budget,
         middle_pool_size=64,
     )
     if not plans:
-        # fallback: single-step that produces Grid and can be satisfied with constants
+        # fallback: single-step that produces Grid and can be satisfied with existing I/consts
         singles = []
         for meta in _FN_META:
             if not meta.produces_grid:
                 continue
-            step = _try_make_step_plan(meta, rng)
+            step = _legacy_try_make_step_plan(meta, rng)
             if step:
                 singles.append([step])
         if not singles:
             raise RuntimeError(
-                "No satisfiable DSL plans found (need constants for non-grid params)."
+                "No satisfiable DSL plans found (need constants/vars for parameters)."
             )
         plans = singles
 
     # Try multiple plans until we can generate all shots successfully
     for attempt in range(min(max_path_retries, len(plans))):
-        plan = plans[attempt]
+        raw_plan = plans[attempt]
+        plan = _prune_and_relabel(raw_plan)
 
         # 2) Render assistant code body
         body_lines = []
-        prev = "I"
-        for i, step in enumerate(plan, start=1):
-            meta = _FN_META[step.idx]
-            xi = f"x{i}"
-            # Build call string in the param order
-            arg_exprs = []
-            for j, cname in enumerate(step.const_names):
-                if j == step.flow_pos:
-                    arg_exprs.append(prev)
-                else:
-                    arg_exprs.append(cname)
-            call = f"{meta.name}({', '.join(arg_exprs)})"
-            body_lines.append(f"    {xi} = {call}")
-            prev = xi
-        body_lines.append(f"    O = {prev}")
+        for s in plan:
+            meta = _FN_META[s.idx]
+            call = _render_call(meta, s.param_srcs)
+            body_lines.append(f"    {s.out_var} = {call}")
+        body_lines.append(f"    O = {plan[-1].out_var}")
         body = "\n".join(body_lines)
 
         assistant_prompt = f"""```python
@@ -470,9 +735,9 @@ def solve(I):
             "```python\n"
             "def solve(I):\n"
             "    # line_1\n"
-            "    x1 = dsl_function(I, CONST1, CONST2)\n"
+            "    x1 = dsl_function(I, xk_or_const, ...)\n"
             "    # line_2\n"
-            "    x2 = dsl_function(x1, CONSTa, CONSTb)\n"
+            "    x2 = dsl_function(I_or_x1, xj_or_const, ...)\n"
             "    # ... up to 5 lines total\n"
             "    O  = xN\n"
             "    return O\n"
@@ -490,21 +755,23 @@ def solve(I):
                 if seed is not None:
                     __import__("random").seed((seed or 0) + seed_bump * 1000)
 
+                # Evaluate plan
+                env_vals: dict[str, Any] = {}
                 input_value = rand_grid()
-                cur = input_value
+                env_vals["I"] = input_value
 
-                # Execute each step with real values
-                for step in plan:
-                    meta = _FN_META[step.idx]
-                    args: list[Any] = []
-                    for j, val in enumerate(step.const_vals):
-                        if j == step.flow_pos:
-                            args.append(cur)
+                for s in plan:
+                    meta = _FN_META[s.idx]
+                    args_vals: list[Any] = []
+                    for p in s.param_srcs:
+                        if p.var_name is not None:
+                            args_vals.append(env_vals[p.var_name])
                         else:
-                            args.append(val)
-                    cur = meta.func(*args)
+                            args_vals.append(p.const_val)
+                    out = meta.func(*args_vals)
+                    env_vals[s.out_var] = out
 
-                output_value = cur
+                output_value = env_vals[plan[-1].out_var]
                 shots.append({
                     "inputs": {"I": to_jsonable(input_value)},
                     "output": to_jsonable(output_value),
@@ -512,7 +779,6 @@ def solve(I):
                 seed_bump += 1
 
             except Exception:
-                # Try a different random input
                 shot_attempts += 1
                 seed_bump += 1
                 if shot_attempts < max_shot_retries:
