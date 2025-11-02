@@ -64,11 +64,14 @@ This project implements a comprehensive DSL for ARC puzzle solving and trains Qw
 
 3. **Install the project and dependencies**:
    ```bash
-   # Install the project in development mode with all dependencies
-   uv sync
-   
-   # Or install with development dependencies
+   # For development (linting, testing, type-checking)
    uv sync --extra dev
+   
+   # For training with GPU/CUDA dependencies (Linux only)
+   uv sync --extra dev --extra gpu
+   
+   # Or install all extras at once
+   uv sync --all-extras
    ```
 
 4. **Activate the virtual environment**:
@@ -96,7 +99,7 @@ All scripts should be executed using `uv run` to ensure proper environment and d
 
 2. **SFT Training**: 
    ```bash
-   uv run torchrun --nproc_per_node <n_gpus> -m arc_dslearn/model_tuning/finetuning_script
+   uv run torchrun --nproc_per_node <n_gpus> -m arc_dslearn.model_tuning.finetuning_script
    ```
 
 3. **RL Training**: 
@@ -118,7 +121,8 @@ All scripts should be executed using `uv run` to ensure proper environment and d
 
 - **Module Execution**: Some scripts (like the pilot script) should be run as modules using `python -m` to ensure proper import resolution
 - **Environment**: Always use `uv run` to execute scripts to maintain consistent dependency management
-- **GPU Requirements**: Training scripts require CUDA-compatible GPU with 16GB+ memory
+- **GPU Requirements**: Training scripts require CUDA-compatible GPU with 16GB+ memory and the `[gpu]` extra dependencies installed
+- **Dependencies**: GPU dependencies (peft, unsloth, vllm, etc.) are optional and only needed for training/evaluation. Development and testing work without them.
 
 ## Next Steps
 

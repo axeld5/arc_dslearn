@@ -8,6 +8,8 @@ from pathlib import Path
 from time import time
 from typing import Any, Dict, Tuple
 
+import unsloth
+
 import matplotlib.pyplot as plt
 import pandas as pd
 import torch
@@ -26,8 +28,8 @@ def evaluate_finetuned_models() -> Dict[str, float]:
 
     # ------------------------------------------------------------------ paths
     BASE_MODEL = "Qwen/Qwen2.5-Coder-7B-Instruct"
-    LORA_SFT_DIR = "qwen2.5_coder_dslearn_os_sft_unsloth/final"
-    LORA_RL_DIR = "qwen2.5_coder_dslearn_os_rl_unsloth/final"
+    LORA_SFT_DIR = "qwen2.5_coder_dslearn_os_sft/final"
+    LORA_RL_DIR = "qwen2.5_coder_dslearn_os_rl/final"
     EVAL_FILE = "eval_split.json"
 
     MAX_NEW = 64
@@ -35,7 +37,7 @@ def evaluate_finetuned_models() -> Dict[str, float]:
     MAX_SEQ_LENGTH = 8192
 
     SHOW_SAMPLES = True
-    SAMPLE_EVERY = 20
+    SAMPLE_EVERY = 50
 
     # ------------------------------------------------------------------ models
     def build_prompt(sample: Dict[str, Any], tokenizer: Any) -> str:

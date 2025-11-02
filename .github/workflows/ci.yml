@@ -19,11 +19,14 @@ jobs:
     - uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
-    - uses: abatilo/actions-poetry@v2   # lightweight lock installer for Hatch, Poetry & PEP 517
-    - name: Install
+    - name: Install uv
+      uses: astral-sh/setup-uv@v4
+      with:
+        enable-cache: true
+    - name: Install dependencies
       run: |
-        pip install --upgrade pip
-        pip install 'hatchling>=1.24' uv
+        # Install only dev dependencies (no GPU/CUDA packages needed for CI)
+        # For training with GPU dependencies, use: uv pip install -e .[dev,gpu]
         uv pip install --system -e .[dev]
     - name: Lint & format
       run: ruff check --output-format github --exclude 'src/arc_dslearn/arc_dsl' .

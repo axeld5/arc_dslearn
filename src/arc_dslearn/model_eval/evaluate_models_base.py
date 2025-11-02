@@ -8,6 +8,8 @@ from pathlib import Path
 from time import time
 from typing import Any, Dict, Tuple
 
+import unsloth
+
 import matplotlib.pyplot as plt
 import pandas as pd
 import torch
@@ -33,7 +35,7 @@ def evaluate_base_model_simple() -> Dict[str, float]:
     MAX_SEQ_LENGTH = 8192
 
     SHOW_SAMPLES = True
-    SAMPLE_EVERY = 20
+    SAMPLE_EVERY = 50
 
     # ------------------------------------------------------------------ models
     def build_simple_prompt(sample: Dict[str, Any], tokenizer: Any) -> str:
