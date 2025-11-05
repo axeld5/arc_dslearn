@@ -2,24 +2,33 @@
 
 from __future__ import annotations
 
+import gc
 import json
+from pathlib import Path
 
-from src.arc_dslearn.data_gene_grid.block_generation import make_multiline_block
-from src.arc_dslearn.data_gene_grid.data_processing import (
-    create_train_eval_split,
-    prepare_datasets_for_loading,
-    remove_answer_overlap,
+from tqdm import tqdm  # optional progress bar
+
+from src.arc_dslearn.data_gene_callable.block_generation import (
+    clear_internal_caches,
+    make_multiline_block,
 )
 
 
-def main_generate_blocks(n: int = 60, max_lines: int = 10, seed: int = 1337):
+def main_generate_blocks(
+    n: int = 60,
+    max_lines: int = 20,
+    seed: int = 1337,
+    max_path_budget: int = 256,
+):
     """Generate n multi-line Grid->Grid blocks using make_multiline_block."""
     blocks = []
     failed_count = 0
 
     for i in range(n):
         try:
-            block = make_multiline_block(max_lines=max_lines, seed=seed + i, n_shots=3)
+            block = make_multiline_block(
+                max_lines=max_lines, seed=seed + i, n_shots=3, path_budget=max_path_budget
+            )
             blocks.append(block)
             if (i + 1) % 20 == 0:
                 print(f"  Generated {i + 1}/{n} blocks (failed: {failed_count})")
@@ -32,12 +41,50 @@ def main_generate_blocks(n: int = 60, max_lines: int = 10, seed: int = 1337):
     return blocks
 
 
+def generate_blocks_to_jsonl(
+    n_samples: int = 1000,
+    out_path: str = "generated_blocks.jsonl",
+    start_seed: int = 0,
+    clear_every: int = 10,
+    include_examples_str: bool = False,
+):
+    """Stream DSL-generated blocks to JSONL (one block per line, no large list kept in memory)."""
+    out_file = Path(out_path)
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+
+    with out_file.open("w", encoding="utf-8") as f:
+        for i in tqdm(range(n_samples), desc="Generating blocks"):
+            seed = start_seed + i
+            try:
+                block = make_multiline_block(
+                    max_lines=20,
+                    path_budget=128,
+                    seed=seed,
+                    include_examples_str=include_examples_str,  # toggle to save memory
+                )
+                f.write(json.dumps(block, ensure_ascii=False) + "\n")
+            except Exception as e:
+                print(f"⚠️  Skipped sample {i} (seed={seed}): {e}")
+            finally:
+                # Free memory regularly
+                if i % clear_every == 0:
+                    clear_internal_caches()
+                    gc.collect()
+
+    print(f"\n✅ Done! Saved {n_samples} blocks to {out_path}")
+
+
 def run_pipeline():
     """Run the data generation pipeline."""
     # Step 1: Generate multi-line Grid→Grid training data
     print("Step 1: Generating multi-line Grid→Grid training data...")
-    training_blocks = main_generate_blocks()
+    generate_blocks_to_jsonl(
+        n_samples=1000,
+        out_path="data/blocks_200.jsonl",
+        include_examples_str=False,  # disable long string field
+    )
 
+    """
     if not training_blocks:
         print("✗ Error: No training blocks were generated successfully. Exiting.")
         return
@@ -92,6 +139,7 @@ def run_pipeline():
     print("from datasets import load_dataset")
     print("train_ds = load_dataset('json', data_files='train_split.json', split='train')")
     print("eval_ds = load_dataset('json', data_files='eval_split.json', split='train')")
+    """
 
 
 if __name__ == "__main__":
