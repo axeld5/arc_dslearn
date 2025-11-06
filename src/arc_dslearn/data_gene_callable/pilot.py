@@ -19,9 +19,17 @@ def main_generate_blocks(
     max_lines: int = 20,
     seed: int = 1337,
     max_path_budget: int = 256,
+    clear_every: int = 10,
 ):
-    """Generate n multi-line Grid->Grid blocks using make_multiline_block."""
-    blocks = []
+    """Generate n multi-line Grid->Grid blocks using make_multiline_block.
+
+    Returns
+    -------
+        dict with 'high_quality' and 'low_quality' lists
+
+    """
+    high_quality_blocks = []
+    low_quality_blocks = []
     failed_count = 0
 
     for i in range(n):
@@ -29,16 +37,37 @@ def main_generate_blocks(
             block = make_multiline_block(
                 max_lines=max_lines, seed=seed + i, n_shots=3, path_budget=max_path_budget
             )
-            blocks.append(block)
+
+            # Separate by quality
+            quality = block.get("quality", "high")
+            if quality == "low":
+                low_quality_blocks.append(block)
+            else:
+                high_quality_blocks.append(block)
+
             if (i + 1) % 20 == 0:
-                print(f"  Generated {i + 1}/{n} blocks (failed: {failed_count})")
+                print(
+                    f"  Generated {i + 1}/{n} blocks (high: {len(high_quality_blocks)}, low: {len(low_quality_blocks)}, failed: {failed_count})"
+                )
         except Exception as e:
             failed_count += 1
             print(f"  Warning: Failed to generate block {i + 1} (seed={seed + i}): {e}")
-            continue
+        finally:
+            if (i + 1) % clear_every == 0:
+                clear_internal_caches()
+                gc.collect()
 
-    print(f"  Successfully generated {len(blocks)}/{n} blocks (failed: {failed_count})")
-    return blocks
+    print(
+        f"  Successfully generated {len(high_quality_blocks) + len(low_quality_blocks)}/{n} blocks:"
+    )
+    print(f"    - High quality: {len(high_quality_blocks)}")
+    print(f"    - Low quality: {len(low_quality_blocks)}")
+    print(f"    - Failed: {failed_count}")
+
+    return {
+        "high_quality": high_quality_blocks,
+        "low_quality": low_quality_blocks,
+    }
 
 
 def generate_blocks_to_jsonl(
@@ -46,32 +75,70 @@ def generate_blocks_to_jsonl(
     out_path: str = "generated_blocks.jsonl",
     start_seed: int = 0,
     clear_every: int = 10,
+    path_budget: int = 64,
     include_examples_str: bool = False,
 ):
-    """Stream DSL-generated blocks to JSONL (one block per line, no large list kept in memory)."""
+    """Stream DSL-generated blocks to JSONL (one block per line, no large list kept in memory).
+
+    Separates high-quality and low-quality blocks into different files.
+    """
     out_file = Path(out_path)
     out_file.parent.mkdir(parents=True, exist_ok=True)
 
-    with out_file.open("w", encoding="utf-8") as f:
+    # Create low-quality output path
+    low_quality_path = out_file.parent / f"{out_file.stem}_low_quality{out_file.suffix}"
+
+    # Statistics tracking
+    stats = {
+        "high_quality": 0,
+        "low_quality": 0,
+        "failed": 0,
+        "quality_reasons": {},
+    }
+
+    with (
+        out_file.open("w", encoding="utf-8") as f_high,
+        low_quality_path.open("w", encoding="utf-8") as f_low,
+    ):
         for i in tqdm(range(n_samples), desc="Generating blocks"):
             seed = start_seed + i
             try:
                 block = make_multiline_block(
-                    max_lines=20,
-                    path_budget=128,
+                    max_lines=30,
+                    path_budget=path_budget,
                     seed=seed,
                     include_examples_str=include_examples_str,  # toggle to save memory
                 )
-                f.write(json.dumps(block, ensure_ascii=False) + "\n")
+
+                # Check quality and route to appropriate file
+                quality = block.get("quality", "high")
+                if quality == "low":
+                    f_low.write(json.dumps(block, ensure_ascii=False) + "\n")
+                    stats["low_quality"] += 1
+                    reason = block.get("quality_reason", "unknown")
+                    stats["quality_reasons"][reason] = stats["quality_reasons"].get(reason, 0) + 1
+                else:
+                    f_high.write(json.dumps(block, ensure_ascii=False) + "\n")
+                    stats["high_quality"] += 1
+
             except Exception as e:
+                stats["failed"] += 1
                 print(f"⚠️  Skipped sample {i} (seed={seed}): {e}")
             finally:
-                # Free memory regularly
-                if i % clear_every == 0:
+                # Free memory regularly (only after first item)
+                if i and (i % clear_every == 0):
                     clear_internal_caches()
                     gc.collect()
 
-    print(f"\n✅ Done! Saved {n_samples} blocks to {out_path}")
+    print("\n✅ Done! Generation statistics:")
+    print(f"  - High quality blocks: {stats['high_quality']} → {out_path}")
+    print(f"  - Low quality blocks: {stats['low_quality']} → {low_quality_path}")
+    print(f"  - Failed generations: {stats['failed']}")
+
+    if stats["quality_reasons"]:
+        print("\n📊 Low quality reasons breakdown:")
+        for reason, count in sorted(stats["quality_reasons"].items(), key=lambda x: -x[1]):
+            print(f"  - {reason}: {count}")
 
 
 def run_pipeline():
@@ -79,9 +146,11 @@ def run_pipeline():
     # Step 1: Generate multi-line Grid→Grid training data
     print("Step 1: Generating multi-line Grid→Grid training data...")
     generate_blocks_to_jsonl(
-        n_samples=1000,
+        n_samples=5000,
         out_path="data/blocks_200.jsonl",
         include_examples_str=False,  # disable long string field
+        path_budget=256,
+        start_seed=42,
     )
 
     """

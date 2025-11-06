@@ -397,7 +397,7 @@ class _Binding:
 # ---------- (1) Variable window ----------
 
 
-def _visible_vars(env_vals: dict[str, Any], window: int = 8) -> tuple[str, ...]:
+def _visible_vars(env_vals: dict[str, Any], window: int = 5) -> tuple[str, ...]:
     """Keep 'I', callable vars, and only the last `window` non-callable xN variables."""
     names = [k for k in env_vals if k != "I"]
     xs = [n for n in names if n.startswith("x")]
@@ -418,6 +418,7 @@ def _visible_vars(env_vals: dict[str, Any], window: int = 8) -> tuple[str, ...]:
 # ---------- Candidate caching for parameters (perf) ----------
 
 
+@lru_cache(maxsize=4096)
 def _callable_arity(fn) -> int | None:
     try:
         sig = inspect.signature(fn)
@@ -712,8 +713,8 @@ def _try_bind_and_run(
     meta: _FnMeta,
     env_vals: dict[str, Any],
     rng,
-    max_trials: int = 12,
-    early_trials: int = 4,
+    max_trials: int = 8,
+    early_trials: int = 3,
     require_grid_from_I: bool = False,  # enforce x1 consumes I as Grid
     max_intermediate_cells: int = 64,
     max_intermediate_items: int = 256,
@@ -767,7 +768,11 @@ def _try_bind_and_run(
             used_var = False
             for cands in cand_lists:
                 var_cands = [b for b in cands if b.src.var_name is not None and not b.src.omit]
-                b = rng.choice(var_cands) if var_cands and rng.random() < 0.6 else rng.choice(cands)
+                b = (
+                    rng.choice(var_cands)
+                    if var_cands and rng.random() < 0.75
+                    else rng.choice(cands)
+                )
                 if b.src.var_name is not None:
                     used_var = True
                 picks.append(b)
@@ -862,9 +867,10 @@ def _sample_path_plans(
     min_len: int = 3,
     path_budget: int = 128,
     planning_shape: tuple[int, int] = (6, 6),
-    heavy_cap: int = 3,
+    heavy_cap: int = 2,
     max_intermediate_cells: int = 64,
     max_intermediate_items: int = 256,
+    max_paths: int = 24,
 ) -> list[list[_StepPlan]]:
     """Build plans by *executing steps during sampling* on a single dry-run input.
 
@@ -876,6 +882,8 @@ def _sample_path_plans(
         return paths
 
     for _ in range(path_budget):
+        if len(paths) >= max_paths:
+            break
         # fresh dry-run environment
         dry_env: dict[str, Any] = {}
         ph, pw = planning_shape
@@ -1133,6 +1141,70 @@ def _legacy_try_make_step_plan(meta: _FnMeta, rng) -> _StepPlan | None:
     return _StepPlan(idx=_FN_META.index(meta), out_var="x1", param_srcs=tuple(param_srcs))
 
 
+# ---------- Quality checkers ----------
+
+
+def _is_empty_grid(grid: Any) -> bool:
+    """Check if a grid is empty (all zeros)."""
+    if not isinstance(grid, tuple) or not grid:
+        return False
+    if not isinstance(grid[0], tuple):
+        return False
+    return all(all(cell == 0 for cell in row) for row in grid)
+
+
+def _grids_are_similar(grid1: Any, grid2: Any) -> bool:
+    """Check if two grids are identical."""
+    return grid1 == grid2
+
+
+def _has_invalid_values(grid: Any) -> bool:
+    """Check if grid contains values outside [0-9] range."""
+    if not isinstance(grid, tuple) or not grid:
+        return False
+    if not isinstance(grid[0], tuple):
+        return False
+    for row in grid:
+        for cell in row:
+            if not isinstance(cell, int) or cell < 0 or cell > 9:
+                return True
+    return False
+
+
+def _check_shots_quality(shots: list[dict[str, Any]]) -> tuple[bool, str]:
+    """Check if shots meet quality criteria.
+
+    Returns
+    -------
+        (is_high_quality, reason_if_low_quality)
+
+    """
+    if not shots:
+        return False, "no_shots"
+
+    # Extract output grids
+    outputs = [shot.get("output") for shot in shots]
+
+    # Check 1: All empty outputs
+    all_empty = all(_is_empty_grid(out) for out in outputs)
+    if all_empty:
+        return False, "all_empty_outputs"
+
+    # Check 2: All outputs similar (identical)
+    if len(outputs) >= 2:
+        first_output = outputs[0]
+        all_similar = all(_grids_are_similar(first_output, out) for out in outputs[1:])
+        if all_similar:
+            return False, "all_outputs_identical"
+
+    # Check 3: Any output has invalid values (not in [0-9])
+    has_invalid = any(_has_invalid_values(out) for out in outputs)
+    if has_invalid:
+        return False, "invalid_values_outside_0_9"
+
+    return True, ""
+
+
 # ---------- Block builder ----------
 
 
@@ -1142,7 +1214,7 @@ def make_multiline_block(
     n_shots: int = 3,
     max_path_retries: int = 10,
     max_shot_retries: int = 50,
-    path_budget: int = 128,
+    path_budget: int = 64,
     include_examples_str: bool = True,  # memory knob: disable to skip big pretty strings
     planning_shape: tuple[int, int] = (6, 6),  # tiny grids for planning
     shot_shape: tuple[int, int] | None = (
@@ -1165,10 +1237,11 @@ def make_multiline_block(
         min_len=3,
         path_budget=path_budget,
         planning_shape=planning_shape,
-        heavy_cap=3,
+        heavy_cap=2,
         max_intermediate_cells=planning_shape[0]
         * planning_shape[1],  # respect chosen planning size
         max_intermediate_items=256,
+        max_paths=24,
     )
     if not plans:
         # fallback: single-step that produces Grid and can be satisfied with existing I/consts
@@ -1285,6 +1358,10 @@ def solve(I):
                     f"# Example {j + 1}\nI = {compact_format(s['inputs']['I'])}\n# Desired → {compact_format(s['output'])}\n"
                     for j, s in enumerate(shots)
                 )
+
+            # Check quality of shots
+            is_high_quality, quality_reason = _check_shots_quality(shots)
+
             return {
                 "name": "|".join(_FN_META[s.idx].name for s in plan),
                 "system_prompt": system_prompt,
@@ -1294,6 +1371,8 @@ def solve(I):
                 "assistant_prompt": assistant_prompt,
                 "shots": shots,
                 "lines": len(plan),
+                "quality": "high" if is_high_quality else "low",
+                "quality_reason": quality_reason,
             }
 
     raise RuntimeError("Failed to generate block with sampled multi-arg plans.")

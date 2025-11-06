@@ -13,4 +13,4 @@ ARC-AGI/
 later_use/
 useful_scripts/
 unsloth_*/
-blocks_200.jsonl
+*.jsonl

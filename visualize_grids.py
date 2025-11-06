@@ -134,7 +134,7 @@ def visualize_all_shots(task):
 def browse_tasks(file_path):
     """Interactive browser for tasks."""
     with open(file_path, "r") as f:
-        data = json.load(f)
+        data = [json.loads(line) for line in f if line.strip()]
 
     print(f"Loaded {len(data)} tasks from {file_path}")
     print("\nAvailable tasks:")
@@ -169,7 +169,7 @@ def browse_tasks(file_path):
 def visualize_task_by_index(file_path, task_idx=0):
     """Visualize a specific task by index."""
     with open(file_path, "r") as f:
-        data = json.load(f)
+        data = [json.loads(line) for line in f if line.strip()]
 
     if 0 <= task_idx < len(data):
         visualize_all_shots(data[task_idx])
@@ -180,7 +180,7 @@ def visualize_task_by_index(file_path, task_idx=0):
 if __name__ == "__main__":
     import sys
 
-    file_path = "eval_split.json"
+    file_path = "data/blocks_200.jsonl"
 
     if len(sys.argv) > 1:
         # If a task index is provided as command line argument
