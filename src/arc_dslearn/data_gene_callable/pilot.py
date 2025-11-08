@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import gc
 import json
+import random
 from pathlib import Path
 
 from tqdm import tqdm  # optional progress bar
@@ -76,11 +77,36 @@ def generate_blocks_to_jsonl(
     start_seed: int = 0,
     clear_every: int = 10,
     path_budget: int = 64,
+    max_lines: int = 30,
     include_examples_str: bool = False,
+    append_mode: bool = False,
+    batch_id: int | None = None,
 ):
     """Stream DSL-generated blocks to JSONL (one block per line, no large list kept in memory).
 
     Separates high-quality and low-quality blocks into different files.
+
+    Parameters
+    ----------
+    n_samples : int
+        Number of samples to generate
+    out_path : str
+        Path to output JSONL file for high-quality blocks
+    start_seed : int
+        Starting seed for random number generation
+    clear_every : int
+        Clear caches every N samples to manage memory
+    path_budget : int
+        Budget for path exploration attempts
+    max_lines : int
+        Maximum number of lines in generated code
+    include_examples_str : bool
+        Whether to include example strings in output (memory intensive)
+    append_mode : bool
+        If True, append to existing files instead of overwriting
+    batch_id : int, optional
+        Batch identifier for progress tracking
+
     """
     out_file = Path(out_path)
     out_file.parent.mkdir(parents=True, exist_ok=True)
@@ -96,15 +122,20 @@ def generate_blocks_to_jsonl(
         "quality_reasons": {},
     }
 
+    # Use append mode if requested
+    mode = "a" if append_mode else "w"
+
+    desc = f"Batch {batch_id}: Generating blocks" if batch_id is not None else "Generating blocks"
+
     with (
-        out_file.open("w", encoding="utf-8") as f_high,
-        low_quality_path.open("w", encoding="utf-8") as f_low,
+        out_file.open(mode, encoding="utf-8") as f_high,
+        low_quality_path.open(mode, encoding="utf-8") as f_low,
     ):
-        for i in tqdm(range(n_samples), desc="Generating blocks"):
+        for i in tqdm(range(n_samples), desc=desc):
             seed = start_seed + i
             try:
                 block = make_multiline_block(
-                    max_lines=30,
+                    max_lines=max_lines,
                     path_budget=path_budget,
                     seed=seed,
                     include_examples_str=include_examples_str,  # toggle to save memory
@@ -130,7 +161,8 @@ def generate_blocks_to_jsonl(
                     clear_internal_caches()
                     gc.collect()
 
-    print("\n✅ Done! Generation statistics:")
+    batch_info = f" (Batch {batch_id})" if batch_id is not None else ""
+    print(f"\n✅ Done{batch_info}! Generation statistics:")
     print(f"  - High quality blocks: {stats['high_quality']} → {out_path}")
     print(f"  - Low quality blocks: {stats['low_quality']} → {low_quality_path}")
     print(f"  - Failed generations: {stats['failed']}")
@@ -140,18 +172,99 @@ def generate_blocks_to_jsonl(
         for reason, count in sorted(stats["quality_reasons"].items(), key=lambda x: -x[1]):
             print(f"  - {reason}: {count}")
 
+    return stats
+
 
 def run_pipeline():
-    """Run the data generation pipeline."""
-    # Step 1: Generate multi-line Grid→Grid training data
-    print("Step 1: Generating multi-line Grid→Grid training data...")
-    generate_blocks_to_jsonl(
-        n_samples=5000,
-        out_path="data/blocks_200.jsonl",
-        include_examples_str=False,  # disable long string field
-        path_budget=256,
-        start_seed=42,
-    )
+    """Run the data generation pipeline in 10 batches of 100 samples each."""
+    print("=" * 80)
+    print("Starting data generation pipeline: 10 batches × 100 samples = 1000 total")
+    print("=" * 80)
+
+    out_path = "data/blocks_200.jsonl"
+    num_batches = 10
+    samples_per_batch = 100
+
+    # Check if files already exist
+    out_file = Path(out_path)
+    low_quality_path = out_file.parent / f"{out_file.stem}_low_quality{out_file.suffix}"
+
+    files_exist = out_file.exists() or low_quality_path.exists()
+    if files_exist:
+        print("\n📝 Existing files detected - will APPEND to:")
+        if out_file.exists():
+            print(f"  - {out_path}")
+        if low_quality_path.exists():
+            print(f"  - {low_quality_path}")
+    else:
+        print("\n📝 Creating new files:")
+        print(f"  - {out_path}")
+        print(f"  - {low_quality_path}")
+
+    # Aggregate statistics across all batches
+    total_stats = {
+        "high_quality": 0,
+        "low_quality": 0,
+        "failed": 0,
+        "quality_reasons": {},
+    }
+
+    for batch_num in range(1, num_batches + 1):
+        print(f"\n{'=' * 80}")
+        print(f"Batch {batch_num}/{num_batches}: Generating {samples_per_batch} samples")
+        print(f"{'=' * 80}")
+
+        # Generate random seed for this batch (more random)
+        batch_seed = random.randint(1000, 999999)
+        print(f"Using random seed: {batch_seed}")
+
+        # First batch overwrites (if files exist from previous run), subsequent batches append
+        append_mode = files_exist or (batch_num > 1)
+
+        batch_stats = generate_blocks_to_jsonl(
+            max_lines=30,
+            n_samples=samples_per_batch,
+            out_path=out_path,
+            include_examples_str=False,  # disable long string field
+            path_budget=128,
+            start_seed=batch_seed,
+            append_mode=append_mode,
+            batch_id=batch_num,
+        )
+
+        # Aggregate statistics
+        total_stats["high_quality"] += batch_stats["high_quality"]
+        total_stats["low_quality"] += batch_stats["low_quality"]
+        total_stats["failed"] += batch_stats["failed"]
+
+        # Merge quality reasons
+        for reason, count in batch_stats["quality_reasons"].items():
+            total_stats["quality_reasons"][reason] = (
+                total_stats["quality_reasons"].get(reason, 0) + count
+            )
+
+        # Clear caches between batches
+        clear_internal_caches()
+        gc.collect()
+
+    # Final summary
+    print(f"\n{'=' * 80}")
+    print("🎉 PIPELINE COMPLETE - Final Statistics:")
+    print(f"{'=' * 80}")
+    print(f"  Total samples processed: {num_batches * samples_per_batch}")
+    print(f"  ✓ High quality blocks: {total_stats['high_quality']}")
+    print(f"  ⚠ Low quality blocks: {total_stats['low_quality']}")
+    print(f"  ✗ Failed generations: {total_stats['failed']}")
+
+    if total_stats["quality_reasons"]:
+        print("\n📊 Overall low quality reasons breakdown:")
+        for reason, count in sorted(total_stats["quality_reasons"].items(), key=lambda x: -x[1]):
+            print(f"  - {reason}: {count}")
+
+    print("\n📁 Output files:")
+    print(f"  - High quality: {out_path}")
+    print(f"  - Low quality: {low_quality_path}")
+    print(f"{'=' * 80}")
 
     """
     if not training_blocks:
