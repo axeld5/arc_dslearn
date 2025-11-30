@@ -200,28 +200,108 @@ def _collect_fn_meta() -> list[_FnMeta]:
 _FN_META: list[_FnMeta] = _collect_fn_meta()
 _ALL_IDX: list[int] = list(range(len(_FN_META)))
 
-# Precompute simple cost model to downweight heavy operators during sampling
-_HEAVY_NAMES = {
-    "objects",
-    "frontiers",
-    "occurrences",
-    "compress",
-    "upscale",
-    "downscale",
-    "hsplit",
-    "vsplit",
+# Function priority weights based on usage analysis of solvers.py
+# Higher weight = more likely to be sampled
+# Weights are relative - a weight of 8 means 8x more likely than weight 1
+_FUNCTION_PRIORITIES: dict[str, float] = {
+    # TIER 1: Very high usage (200+ uses) - weight 8
+    "apply": 8.0,  # 394 uses
+    "fill": 8.0,  # 287 uses
+    "fork": 8.0,  # 277 uses
+    "compose": 8.0,  # 268 uses
+    "lbind": 8.0,  # 240 uses
+    "objects": 8.0,  # 237 uses
+    "rbind": 8.0,  # 209 uses
+    # TIER 2: High usage (100-200 uses) - weight 6
+    "mapply": 6.0,  # 185 uses
+    "ofcolor": 6.0,  # 175 uses
+    "paint": 6.0,  # 147 uses
+    "chain": 6.0,  # 126 uses
+    # TIER 3: Medium-high usage (50-100 uses) - weight 4
+    "branch": 4.0,  # 79 uses
+    "first": 4.0,  # 76 uses
+    "sfilter": 4.0,  # 73 uses
+    "merge": 4.0,  # 71 uses
+    "shift": 4.0,  # 64 uses
+    "argmax": 4.0,  # 58 uses
+    "subgrid": 4.0,  # 58 uses
+    "canvas": 4.0,  # 55 uses
+    # TIER 4: Medium usage (30-50 uses) - weight 3
+    "matcher": 3.0,  # 48 uses
+    "difference": 3.0,  # 45 uses
+    "crop": 3.0,  # 42 uses
+    "vconcat": 3.0,  # 42 uses
+    "combine": 3.0,  # 39 uses
+    "hconcat": 3.0,  # 36 uses
+    "underfill": 3.0,  # 35 uses
+    "vmirror": 3.0,  # 32 uses
+    # TIER 5: Lower-medium usage (20-30 uses) - weight 2
+    "hmirror": 2.0,  # 28 uses
+    "extract": 2.0,  # 27 uses
+    "equality": 2.0,  # 26 uses
+    "partition": 2.0,  # 26 uses
+    "rot90": 2.0,  # 24 uses
+    "order": 2.0,  # 23 uses
+    "shape": 2.0,  # 23 uses
+    "argmin": 2.0,  # 22 uses
+    "normalize": 2.0,  # 21 uses
+    "power": 2.0,  # 20 uses
+    "mostcolor": 2.0,  # 19 uses
+    "recolor": 2.0,  # 19 uses
+    # TIER 6: Lower usage (10-20 uses) - weight 1.5
+    "box": 1.5,  # 17 uses
+    "last": 1.5,  # 17 uses
+    "neighbors": 1.5,  # 17 uses
+    "intersection": 1.5,  # 17 uses
+    "center": 1.5,  # 16 uses
+    "connect": 1.5,  # 16 uses
+    "fgpartition": 1.5,  # 16 uses
+    "dmirror": 1.5,  # 15 uses
+    "rot180": 1.5,  # 14 uses
+    # TIER 7: Low usage (<10 uses) - weight 1.0 (default)
+    # All other functions get weight 1.0 by default
 }
-_COST: dict[int, int] = {i: (3 if _FN_META[i].name in _HEAVY_NAMES else 1) for i in _ALL_IDX}
+
+# Default weight for functions not explicitly listed
+_DEFAULT_PRIORITY = 1.0
+
+
+def _get_function_priority(name: str) -> float:
+    """Get priority weight for a function."""
+    return _FUNCTION_PRIORITIES.get(name, _DEFAULT_PRIORITY)
 
 
 def _weighted_shuffle(ids: list[int], rng) -> list[int]:
-    """Sample without replacement using weights inversely proportional to cost."""
+    """Shuffle with priority weights - higher priority functions appear earlier."""
     if not ids:
         return ids
-    weights = [1.0 / max(1, _COST[i]) for i in ids]
-    # Efraimidis–Spirakis
-    keys = [rng.random() ** (1.0 / w) for w in weights]
-    return [i for _, i in sorted(zip(keys, ids, strict=False), reverse=True)]
+
+    # Get weights for each function
+    weights = [_get_function_priority(_FN_META[i].name) for i in ids]
+
+    # Weighted sampling without replacement
+    result = []
+    remaining = list(zip(ids, weights, strict=False))
+
+    while remaining:
+        total = sum(w for _, w in remaining)
+        if total <= 0:
+            # Fallback to random if all weights are zero
+            result.extend([i for i, _ in remaining])
+            rng.shuffle(result[len(result) - len(remaining) :])
+            break
+
+        # Pick a random point in the weight distribution
+        r = rng.random() * total
+        cumulative = 0.0
+        for idx, (fid, w) in enumerate(remaining):
+            cumulative += w
+            if cumulative >= r:
+                result.append(fid)
+                remaining.pop(idx)
+                break
+
+    return result
 
 
 # ---------- Exports ----------
@@ -255,15 +335,6 @@ def get_fn_meta() -> list[_FnMeta]:
 def get_all_idx() -> list[int]:
     """Get all function indices."""
     return _ALL_IDX
-
-
-def get_heavy_names() -> set[str]:
-    """Get set of heavy operation names."""
-    return _HEAVY_NAMES
-
-
-def _is_heavy_meta(mi: int) -> bool:
-    return _FN_META[mi].name in _HEAVY_NAMES
 
 
 def _meta_wants_callable(mi: int) -> bool:

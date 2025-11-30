@@ -13,10 +13,9 @@ from src.arc_dslearn.data_gene_callable.candidates import (
     _reorder_candidates_by_role,
     _visible_vars,
 )
-from src.arc_dslearn.data_gene_callable.context import _run_with_timeout
+from src.arc_dslearn.data_gene_callable.context import _check_deadline, _run_with_timeout
 from src.arc_dslearn.data_gene_callable.dsl_meta import (
     _FnMeta,
-    _is_heavy_meta,
     _is_pair_applicator,
     _meta_wants_callable,
     _produces_tuple_type,
@@ -79,9 +78,27 @@ def _render_call(meta: _FnMeta, srcs: tuple[_ParamSrc, ...]) -> str:
 
 
 def _biased_length(rng, min_len: int, max_len: int) -> int:
-    """Favor longer paths softly."""
+    """Sample path length with a distribution that favors longer but achievable paths.
+
+    Uses a capped linear distribution that:
+    - Favors longer paths (linear growth up to a "sweet spot")
+    - Caps weights after ~15-20 steps to avoid wasting attempts on very long paths
+    - Still allows occasional very long path attempts
+    """
     lengths = list(range(min_len, max_len + 1))
-    weights = list(range(1, len(lengths) + 1))
+
+    # Linear weights up to step 15, then flatten (longer paths are rare but possible)
+    # This concentrates attempts on achievable lengths (5-15) while still trying longer
+    sweet_spot = 15
+    weights = []
+    for _i, length in enumerate(lengths):
+        if length <= sweet_spot:
+            weights.append(length)  # Linear growth: 3, 4, 5, ..., 15
+        else:
+            # Slowly decay for very long paths: 15, 14, 13, ... (but floor at 5)
+            decay_weight = max(5, sweet_spot - (length - sweet_spot) // 2)
+            weights.append(decay_weight)
+
     return rng.choices(lengths, weights=weights, k=1)[0]
 
 
@@ -160,17 +177,31 @@ def _try_bind_and_run(
     # Try randomized attempts (early few, then remainder if needed)
     def _attempts(limit: int):
         for _ in range(limit):
+            # Check deadline before each attempt
+            _check_deadline()
+
             picks: list[_Binding] = []
             used_var = False
+            used_var_names: set[str] = set()  # Track used variables for diversity
+
             for cands in cand_lists:
                 var_cands = [b for b in cands if b.src.var_name is not None and not b.src.omit]
-                b = (
-                    rng.choice(var_cands)
-                    if var_cands and rng.random() < 0.75
-                    else rng.choice(cands)
-                )
+
+                # For diversity: prefer variables not already used (for same-type params)
+                # This helps functions like manhattan(a, b) get different patches
+                unused_var_cands = [b for b in var_cands if b.src.var_name not in used_var_names]
+
+                if unused_var_cands and rng.random() < 0.8:
+                    # Prefer unused variable
+                    b = rng.choice(unused_var_cands)
+                elif var_cands and rng.random() < 0.75:
+                    b = rng.choice(var_cands)
+                else:
+                    b = rng.choice(cands)
+
                 if b.src.var_name is not None:
                     used_var = True
+                    used_var_names.add(b.src.var_name)
                 picks.append(b)
 
             # Make sure required params are not omitted
@@ -264,11 +295,15 @@ def _try_build_single_path(
     min_len: int,
     max_len: int,
     allow_setup_steps: int,
-    heavy_cap: int,
     max_intermediate_cells: int,
     max_intermediate_items: int,
 ) -> list[_StepPlan] | None:
-    """Try to build a single valid path plan. Returns the plan or None if failed."""
+    """Try to build a single valid path plan. Returns the plan or None if failed.
+
+    Key feature: If targeting a long path (e.g., 40 steps) but failing at step 25,
+    we try to salvage the 25-step partial path by adding a final Grid-producing step.
+    This makes long path attempts much more efficient.
+    """
     import src.arc_dslearn.arc_dsl.dsl as dsl
 
     _FN_META = get_fn_meta()
@@ -293,11 +328,17 @@ def _try_build_single_path(
     last_produced_tuple = False  # track if last step produced tuple-like output
     grid_consumed_at_step = None  # track when we first consumed I
 
+    # Track salvageable state: (plan_copy, env_copy, step_no) at last valid point
+    # We can salvage if: grid was consumed AND we have enough steps for min_len
+    last_salvageable: tuple[list[_StepPlan], dict[str, Any], int] | None = None
+
     # (5) negative cache for this attempt
     failed_meta_env: set[tuple[int, tuple[tuple[str, bool], ...]]] = set()
-    heavy_used = 0
 
     for step_no in range(1, L):
+        # Cooperative timeout check - raises TimeoutException if deadline exceeded
+        _check_deadline()
+
         # Prefilter by feasibility
         feasible = [i for i in _ALL_IDX if _can_satisfy(_FN_META[i], dry_env)]
         if not feasible:
@@ -320,13 +361,6 @@ def _try_build_single_path(
             # Past setup window and haven't consumed grid yet: fail
             ok = False
             break
-
-        # Heavy-op budget
-        if heavy_used >= heavy_cap:
-            feasible = [i for i in feasible if not _is_heavy_meta(i)]
-            if not feasible:
-                ok = False
-                break
 
         # build a base candidate pool
         cands = list(feasible)
@@ -360,13 +394,54 @@ def _try_build_single_path(
         if have_callable_var:
             consumer_metas = [i for i in feasible if _meta_wants_callable(i)]
             cands += consumer_metas
-            # Extra boost for immediate callable consumption (1-2 steps after creation)
-            if last_callable_var and step_no <= 10:
+            # Extra boost for immediate callable consumption throughout the path
+            if last_callable_var and step_no <= L:  # boost throughout entire path
                 cands += consumer_metas
 
-        # 2) early in the plan, if we don't have callable vars, upweight metas that PRODUCE callables
-        if (not have_callable_var) and (step_no <= 3):
+        # 2) if we don't have callable vars, upweight metas that PRODUCE callables
+        # Allow callable production at any point, not just early (needed for long paths)
+        if (not have_callable_var) and (step_no <= max(5, L // 3)):
             cands += [i for i in feasible if _FN_META[i].returns_callable]
+
+        # 3) Boost combinator functions (fork, chain, compose) - key patterns in solvers
+        # These are essential for complex compositions like fork() + compose() chains
+        combinator_names = {"fork", "chain", "compose"}
+        combinator_metas = [i for i in feasible if _FN_META[i].name in combinator_names]
+        if combinator_metas:
+            # Moderate boost (2x) to encourage combinator usage throughout the path
+            cands += combinator_metas * 2
+
+        # 4) Count how many patch/object variables we have for two-patch function boosting
+        patch_vars = sum(
+            1
+            for v in dry_env.values()
+            if isinstance(v, frozenset)
+            and v
+            and not callable(v)
+            and isinstance(next(iter(v)), tuple)  # looks like Object/Indices
+        )
+
+        # 5) Boost extractors (first, last, argmax, argmin) after container-producing functions
+        # These enable two-patch functions by creating individual patches
+        if last_produced_fn in {"objects", "fgpartition", "partition", "frontiers"}:
+            extractor_names = {"first", "last", "argmax", "argmin", "extract"}
+            extractor_metas = [i for i in feasible if _FN_META[i].name in extractor_names]
+            if extractor_metas:
+                cands += extractor_metas * 3  # strong boost after container producers
+
+        # 6) Boost two-patch functions when we have 2+ patch variables
+        if patch_vars >= 2:
+            two_patch_names = {
+                "manhattan",
+                "adjacent",
+                "gravitate",
+                "position",
+                "hmatching",
+                "vmatching",
+            }
+            two_patch_metas = [i for i in feasible if _FN_META[i].name in two_patch_names]
+            if two_patch_metas:
+                cands += two_patch_metas * 3  # strong boost when we can actually use them
 
         metas_order = _weighted_shuffle(cands, rng)
 
@@ -396,8 +471,6 @@ def _try_build_single_path(
             ever_used_grid = ever_used_grid or used_grid
             if _FN_META[mi].returns_callable:
                 have_callable_var = True
-            if _is_heavy_meta(mi):
-                heavy_used += 1
             break
 
         if picked is None:
@@ -428,16 +501,29 @@ def _try_build_single_path(
         if grid_consumed_at_step is None and used_grid:
             grid_consumed_at_step = step_no
 
-    # must have at least one grid usage and it must have happened within setup window
+        # Save salvageable checkpoint: if grid consumed and we have enough steps
+        # We need at least min_len steps total (current + 1 for final step)
+        # Only save every few steps to avoid overhead
+        if (
+            grid_consumed_at_step is not None
+            and len(plan) + 1 >= min_len
+            and (step_no % 3 == 0 or step_no >= L - 2)
+        ):
+            last_salvageable = (list(plan), dict(dry_env), step_no)
+
+    # Try to salvage if main path failed but we have a valid partial
     if not ok or not ever_used_grid or grid_consumed_at_step is None:
-        return None
+        if last_salvageable is not None:
+            # Restore to last salvageable state and try to add final step
+            plan, dry_env, salvage_step = last_salvageable
+            L = salvage_step + 1  # Adjust L for final step naming
+        else:
+            return None
 
     # final step: must return Grid. Prefer metas annotated as producing Grid; but accept
     # runtime-validated returns that are structurally a Grid (tuple-of-tuples-of-ints).
     final_cands = [i for i, m in enumerate(_FN_META) if m.produces_grid] or _ALL_IDX
     final_cands = [i for i in final_cands if _can_satisfy(_FN_META[i], dry_env)]
-    if heavy_used >= heavy_cap:
-        final_cands = [i for i in final_cands if not _is_heavy_meta(i)]
     if not final_cands:
         return None
     metas_order = _weighted_shuffle(final_cands, rng)
@@ -492,12 +578,11 @@ def _sample_path_plans(
     min_len: int = 3,
     path_budget: int = 128,
     planning_shape: tuple[int, int] = (6, 6),
-    heavy_cap: int = 2,
-    max_intermediate_cells: int = 64,
-    max_intermediate_items: int = 256,
+    max_intermediate_cells: int = 128,  # Increased to allow longer paths
+    max_intermediate_items: int = 512,  # Increased to allow longer paths
     max_paths: int = 24,
-    allow_setup_steps: int = 2,  # allow 1-2 setup steps before consuming I
-    path_timeout: float = 10.0,  # timeout in seconds for each path exploration
+    allow_setup_steps: int = 3,  # Increased to allow more setup flexibility
+    path_timeout: float = 15.0,  # Increased timeout for longer paths
 ) -> list[list[_StepPlan]]:
     """Build plans by *executing steps during sampling* on a single dry-run input.
 
@@ -529,7 +614,6 @@ def _sample_path_plans(
             min_len,
             max_len,
             allow_setup_steps,
-            heavy_cap,
             max_intermediate_cells,
             max_intermediate_items,
         )

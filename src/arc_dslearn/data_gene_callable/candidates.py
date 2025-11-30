@@ -14,10 +14,12 @@ from src.arc_dslearn.data_gene_callable.dsl_meta import (
     get_unary_callable_consts,
 )
 from src.arc_dslearn.data_gene_callable.role_templates import (
+    _is_binary_combiner,
     _is_geometry_callable,
     _is_predicate_callable,
     _is_scorer_ending,
     _is_selector_callable,
+    _is_unary_transform,
     get_desired_arity,
     get_role_templates,
 )
@@ -126,6 +128,16 @@ def _cached_param_candidates(
         elif role_hint == "geometry":
             # Prefer geometry for mapply on indices/objects
             pool = [t for t in _CALLABLE_CONSTS if _is_geometry_callable(t[0])]
+            if not pool:
+                pool = _CALLABLE_CONSTS
+        elif role_hint == "unary_transform":
+            # For fork/chain/compose branches - prefer unary transform functions
+            pool = [t for t in _CALLABLE_CONSTS if _is_unary_transform(t[0])]
+            if not pool:
+                pool = _CALLABLE_CONSTS
+        elif role_hint == "binary_combiner":
+            # For fork outer function - prefer binary combiners
+            pool = [t for t in _CALLABLE_CONSTS if _is_binary_combiner(t[0])]
             if not pool:
                 pool = _CALLABLE_CONSTS
 

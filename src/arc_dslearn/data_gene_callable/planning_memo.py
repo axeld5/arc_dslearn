@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import src.arc_dslearn.arc_dsl.dsl as dsl
-from src.arc_dslearn.data_gene_callable.context import _in_planning
+from src.arc_dslearn.data_gene_callable.context import _check_deadline, _in_planning
 from src.arc_dslearn.data_gene_callable.generators import rand_grid
 
 # ---------- Grid sizing helpers ----------
@@ -116,6 +116,9 @@ def _should_cache_result(res: Any) -> bool:
 
 def _call_with_optional_memo(fn_name, args_list):
     """Call DSL function with optional memoization in planning mode."""
+    # Check deadline before potentially expensive DSL call
+    _check_deadline()
+
     # Generation phase: just call directly
     if not _should_cache_call(fn_name, args_list):
         return getattr(dsl, fn_name)(*args_list)

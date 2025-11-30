@@ -105,11 +105,12 @@ def make_multiline_block(
             min_len=3,
             path_budget=path_budget,
             planning_shape=planning_shape,
-            heavy_cap=2,
             max_intermediate_cells=planning_shape[0]
-            * planning_shape[1],  # respect chosen planning size
-            max_intermediate_items=256,
-            max_paths=24,
+            * planning_shape[1]
+            * 2,  # allow larger intermediates
+            max_intermediate_items=512,  # increased for longer paths
+            max_paths=32,  # try more paths to find long ones
+            path_timeout=45.0,  # more time for longer paths
         )
     if not plans:
         # fallback: single-step that produces Grid and can be satisfied with existing I/consts

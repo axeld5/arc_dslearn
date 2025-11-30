@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import gc
 import json
-import random
+import os
+import signal
+import sys
+import time
 from pathlib import Path
 
 from tqdm import tqdm  # optional progress bar
@@ -15,12 +18,72 @@ from src.arc_dslearn.data_gene_callable.block_generation import (
 )
 
 
+class TimeoutError(Exception):
+    """Raised when a block generation times out."""
+
+    pass
+
+
+def _timeout_handler(signum, frame):
+    """Signal handler for timeout."""
+    raise TimeoutError("Block generation timed out")
+
+
+def _make_multiline_block_with_timeout(timeout_seconds: float = 120.0, **kwargs):
+    """Run make_multiline_block with a per-sample timeout.
+
+    This prevents individual samples from taking too long and blocking the entire pipeline.
+    If a sample times out, it raises TimeoutError.
+
+    Note: On Windows, this uses a simple time-based check instead of signals.
+
+    Parameters
+    ----------
+    timeout_seconds : float
+        Maximum time in seconds to allow for generating a single block (default: 120s = 2 minutes)
+    **kwargs
+        Arguments to pass to make_multiline_block
+
+    Returns
+    -------
+    dict
+        The generated block
+
+    Raises
+    ------
+    TimeoutError
+        If the block generation times out
+
+    """
+    # Use signal-based timeout on Unix, time-based check on Windows
+    if sys.platform == "win32":
+        # Windows: use time-based approach (less reliable but doesn't break state)
+        # The path exploration timeout in context.py (multiprocessing-based) will
+        # still catch the actual long-running operations
+        return make_multiline_block(**kwargs)
+    else:
+        # Unix: use signal-based timeout (more reliable)
+        old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
+        signal.alarm(int(timeout_seconds))
+
+        try:
+            result = make_multiline_block(**kwargs)
+            signal.alarm(0)  # Cancel the alarm
+            return result
+        except TimeoutError:
+            signal.alarm(0)
+            raise RuntimeError(f"Block generation timed out after {timeout_seconds}s") from None
+        finally:
+            signal.signal(signal.SIGALRM, old_handler)
+
+
 def main_generate_blocks(
     n: int = 60,
     max_lines: int = 20,
     seed: int = 1337,
     max_path_budget: int = 256,
     clear_every: int = 10,
+    sample_timeout: float = 180.0,  # 3 minutes - less aggressive
 ):
     """Generate n multi-line Grid->Grid blocks using make_multiline_block.
 
@@ -35,8 +98,12 @@ def main_generate_blocks(
 
     for i in range(n):
         try:
-            block = make_multiline_block(
-                max_lines=max_lines, seed=seed + i, n_shots=3, path_budget=max_path_budget
+            block = _make_multiline_block_with_timeout(
+                timeout_seconds=sample_timeout,
+                max_lines=max_lines,
+                seed=seed + i,
+                n_shots=3,
+                path_budget=max_path_budget,
             )
 
             # Separate by quality
@@ -52,7 +119,11 @@ def main_generate_blocks(
                 )
         except Exception as e:
             failed_count += 1
-            print(f"  Warning: Failed to generate block {i + 1} (seed={seed + i}): {e}")
+            error_msg = str(e)
+            if "timed out" in error_msg.lower():
+                print(f"  ⏱️  Block {i + 1} timed out (seed={seed + i})")
+            else:
+                print(f"  Warning: Failed to generate block {i + 1} (seed={seed + i}): {e}")
         finally:
             if (i + 1) % clear_every == 0:
                 clear_internal_caches()
@@ -81,6 +152,7 @@ def generate_blocks_to_jsonl(
     include_examples_str: bool = False,
     append_mode: bool = False,
     batch_id: int | None = None,
+    sample_timeout: float = 180.0,  # 3 minutes per sample max (less aggressive)
 ):
     """Stream DSL-generated blocks to JSONL (one block per line, no large list kept in memory).
 
@@ -106,6 +178,8 @@ def generate_blocks_to_jsonl(
         If True, append to existing files instead of overwriting
     batch_id : int, optional
         Batch identifier for progress tracking
+    sample_timeout : float
+        Maximum time in seconds to allow for generating a single block (default: 120s)
 
     """
     out_file = Path(out_path)
@@ -133,13 +207,16 @@ def generate_blocks_to_jsonl(
     ):
         for i in tqdm(range(n_samples), desc=desc):
             seed = start_seed + i
+            start_time = time.time()
             try:
-                block = make_multiline_block(
+                block = _make_multiline_block_with_timeout(
+                    timeout_seconds=sample_timeout,
                     max_lines=max_lines,
                     path_budget=path_budget,
                     seed=seed,
                     include_examples_str=include_examples_str,  # toggle to save memory
                 )
+                elapsed = time.time() - start_time
 
                 # Check quality and route to appropriate file
                 quality = block.get("quality", "high")
@@ -152,9 +229,18 @@ def generate_blocks_to_jsonl(
                     f_high.write(json.dumps(block, ensure_ascii=False) + "\n")
                     stats["high_quality"] += 1
 
+                # Log slow samples
+                if elapsed > sample_timeout * 0.5:
+                    print(f"⏱️  Sample {i} took {elapsed:.1f}s (seed={seed})")
+
             except Exception as e:
                 stats["failed"] += 1
-                print(f"⚠️  Skipped sample {i} (seed={seed}): {e}")
+                elapsed = time.time() - start_time
+                error_msg = str(e)
+                if "timed out" in error_msg.lower():
+                    print(f"⏱️  Sample {i} timed out after {elapsed:.1f}s (seed={seed})")
+                else:
+                    print(f"⚠️  Skipped sample {i} (seed={seed}): {e}")
             finally:
                 # Free memory regularly (only after first item)
                 if i and (i % clear_every == 0):
@@ -214,22 +300,23 @@ def run_pipeline():
         print(f"Batch {batch_num}/{num_batches}: Generating {samples_per_batch} samples")
         print(f"{'=' * 80}")
 
-        # Generate random seed for this batch (more random)
-        batch_seed = random.randint(1000, 999999)
+        # Generate truly random seed for this batch using time + entropy
+        batch_seed = int(time.time() * 1000000) % 1000000000 ^ os.getpid() ^ batch_num
         print(f"Using random seed: {batch_seed}")
 
         # First batch overwrites (if files exist from previous run), subsequent batches append
         append_mode = files_exist or (batch_num > 1)
 
         batch_stats = generate_blocks_to_jsonl(
-            max_lines=30,
+            max_lines=50,  # Increased to allow longer paths
             n_samples=samples_per_batch,
             out_path=out_path,
             include_examples_str=False,  # disable long string field
-            path_budget=128,
+            path_budget=256,  # Increased budget to find more long paths
             start_seed=batch_seed,
             append_mode=append_mode,
             batch_id=batch_num,
+            sample_timeout=180.0,  # 3 minutes max per sample (less aggressive)
         )
 
         # Aggregate statistics

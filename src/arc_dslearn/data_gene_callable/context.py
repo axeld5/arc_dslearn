@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import contextvars
-import threading
+import time
 from contextlib import contextmanager
 
 # ---------- Planning mode context ----------
@@ -35,29 +35,45 @@ class TimeoutException(Exception):
     pass
 
 
+# Global deadline for cooperative timeout checking within functions
+_deadline = contextvars.ContextVar("_deadline", default=None)
+
+
+def _check_deadline():
+    """Check if we've exceeded the deadline. Raise TimeoutException if so.
+
+    Call this periodically in long-running functions for cooperative timeout.
+    """
+    deadline = _deadline.get()
+    if deadline is not None and time.monotonic() > deadline:
+        raise TimeoutException("Operation exceeded deadline")
+
+
+def _set_deadline(seconds: float):
+    """Set a deadline for cooperative timeout checking."""
+    return _deadline.set(time.monotonic() + seconds)
+
+
+def _clear_deadline(token):
+    """Clear the deadline."""
+    _deadline.reset(token)
+
+
 def _run_with_timeout(func, timeout_seconds: float, *args, **kwargs):
     """Run a function with a timeout. Returns (result, timed_out).
 
     If timed_out is True, result is None and the function exceeded the timeout.
+
+    Uses cooperative timeout via deadline checking within the function.
+    No threads involved - simpler and more reliable on Windows.
     """
-    result = [None]
-    exception = [None]
-
-    def target():
-        try:
-            result[0] = func(*args, **kwargs)
-        except Exception as e:
-            exception[0] = e
-
-    thread = threading.Thread(target=target, daemon=True)
-    thread.start()
-    thread.join(timeout=timeout_seconds)
-
-    if thread.is_alive():
-        # Thread is still running, timeout occurred
+    token = _set_deadline(timeout_seconds)
+    try:
+        result = func(*args, **kwargs)
+        return result, False
+    except TimeoutException:
         return None, True
-
-    if exception[0] is not None:
-        raise exception[0]
-
-    return result[0], False
+    except Exception:
+        raise
+    finally:
+        _clear_deadline(token)
